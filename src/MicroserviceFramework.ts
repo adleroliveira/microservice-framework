@@ -9,6 +9,7 @@ import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
 import { v4 as uuidv4 } from "uuid";
 import { LogStrategy } from "./utils/logging/LogStrategy";
+import { ServerRunner } from "./ServerRunner";
 
 // Define a symbol for our metadata key
 const REQUEST_HANDLER_METADATA_KEY = Symbol("requestHandler");
@@ -700,4 +701,5 @@ export abstract class MicroserviceFramework<
   }
 }
 
+export { ServerRunner };
 export * from "./interfaces";

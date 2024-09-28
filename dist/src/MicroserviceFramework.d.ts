@@ -3,6 +3,7 @@ import { RateLimitedTaskScheduler } from "./RateLimitedTaskScheduler";
 import { ServiceDiscoveryManager } from "./ServiceDiscoveryManager";
 import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
+import { ServerRunner } from "./ServerRunner";
 export declare function RequestHandler<T>(requestType: string): <M extends (arg: T) => Promise<any> | any>(target: any, propertyKey: string, descriptor: TypedPropertyDescriptor<M>) => void;
 export interface IServerConfig {
     namespace: string;
@@ -84,4 +85,5 @@ export declare abstract class MicroserviceFramework<TRequestBody, TResponseData>
     protected makeRequest<T>(props: RequestProps): Promise<IResponse<T>>;
     private generateRequestId;
 }
+export { ServerRunner };
 export * from "./interfaces";
