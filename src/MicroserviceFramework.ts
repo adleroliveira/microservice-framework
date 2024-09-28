@@ -10,7 +10,11 @@ import "reflect-metadata";
 import { v4 as uuidv4 } from "uuid";
 import { LogStrategy } from "./utils/logging/LogStrategy";
 import { ServerRunner } from "./ServerRunner";
-import { PubSubConsumer } from "./PubSubConsumer";
+import {
+  PubSubConsumer,
+  PubSubConsumerOptions,
+  MessageHandler,
+} from "./PubSubConsumer";
 
 // Define a symbol for our metadata key
 const REQUEST_HANDLER_METADATA_KEY = Symbol("requestHandler");
@@ -702,5 +706,11 @@ export abstract class MicroserviceFramework<
   }
 }
 
-export { ServerRunner, PubSubConsumer };
+export {
+  ServerRunner,
+  PubSubConsumer,
+  PubSubConsumerOptions,
+  MessageHandler,
+  Loggable,
+};
 export * from "./interfaces";

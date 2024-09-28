@@ -1,10 +1,11 @@
 import { IMessage, IBackEnd, ChannelBinding } from "./interfaces";
 import { RateLimitedTaskScheduler } from "./RateLimitedTaskScheduler";
+import { Loggable } from "./utils/logging/Loggable";
 import { ServiceDiscoveryManager } from "./ServiceDiscoveryManager";
 import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
 import { ServerRunner } from "./ServerRunner";
-import { PubSubConsumer } from "./PubSubConsumer";
+import { PubSubConsumer, PubSubConsumerOptions, MessageHandler } from "./PubSubConsumer";
 export declare function RequestHandler<T>(requestType: string): <M extends (arg: T) => Promise<any> | any>(target: any, propertyKey: string, descriptor: TypedPropertyDescriptor<M>) => void;
 export interface IServerConfig {
     namespace: string;
@@ -86,5 +87,5 @@ export declare abstract class MicroserviceFramework<TRequestBody, TResponseData>
     protected makeRequest<T>(props: RequestProps): Promise<IResponse<T>>;
     private generateRequestId;
 }
-export { ServerRunner, PubSubConsumer };
+export { ServerRunner, PubSubConsumer, PubSubConsumerOptions, MessageHandler, Loggable, };
 export * from "./interfaces";
