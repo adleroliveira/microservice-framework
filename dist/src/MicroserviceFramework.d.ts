@@ -84,3 +84,4 @@ export declare abstract class MicroserviceFramework<TRequestBody, TResponseData>
     protected makeRequest<T>(props: RequestProps): Promise<IResponse<T>>;
     private generateRequestId;
 }
+export * from "./interfaces";

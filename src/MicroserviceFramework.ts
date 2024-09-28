@@ -699,3 +699,5 @@ export abstract class MicroserviceFramework<
       .substr(2, 9)}`;
   }
 }
+
+export * from "./interfaces";
