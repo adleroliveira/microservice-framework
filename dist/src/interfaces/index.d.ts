@@ -12,4 +12,5 @@ import { ISet } from "./ISet";
 import { IPublishingStrategy } from "./IPublishingStrategy";
 import { ITextToAudioStrategy } from "./ITextToAudioStrategy";
 import { IPubSubClient } from "./IPubSubClient";
-export { IMessage, IBackEnd, INotificationStrategy, ChannelBinding, IRequest, IResponse, IRequestHeader, IQueueStrategy, IServiceRegistry, ITable, IList, ISortedSet, ISet, IPublishingStrategy, ITextToAudioStrategy, IPubSubClient, };
+import { IStorageStrategy } from "./IStorageStrategy";
+export { IMessage, IBackEnd, INotificationStrategy, ChannelBinding, IRequest, IResponse, IRequestHeader, IQueueStrategy, IServiceRegistry, ITable, IList, ISortedSet, ISet, IPublishingStrategy, ITextToAudioStrategy, IPubSubClient, IStorageStrategy, };
