@@ -3,7 +3,13 @@ import {
   RateLimitedTaskScheduler,
   TaskOutput,
 } from "./RateLimitedTaskScheduler";
-import { Loggable, LoggableError, LogMessage } from "./utils/logging/Loggable";
+import {
+  Loggable,
+  LoggableError,
+  LogMessage,
+  logMethod,
+  ConsoleStrategy,
+} from "./utils/logging/Loggable";
 import { ServiceDiscoveryManager } from "./ServiceDiscoveryManager";
 import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
@@ -82,6 +88,7 @@ export interface IServerConfig {
   tpsInterval: number;
   serviceId: string;
   requestCallbackTimeout?: number;
+  logStrategy?: LogStrategy;
 }
 
 export interface ServiceStatus extends IServerConfig {
@@ -145,24 +152,21 @@ export abstract class MicroserviceFramework<
   IRequest<TRequestBody>,
   IResponse<TResponseData>
 > {
-  // Refactoring Zone
-  readonly namespace: string;
   private lobby: ChannelBinding<IRequest<any>>;
   private serviceChannel: ChannelBinding<IRequest<any>>;
+  private statusUpdateTimeoutId: NodeJS.Timeout | null = null;
+  private pendingRequests: Map<string, CallbackObject<any>> = new Map();
+  private requestHandlers: Map<string, RequestHandlerMetadata>;
   protected broadcastChannel: ChannelBinding<IRequest<any>>;
-  readonly address: string;
-  // End of refactoring zone.
-
   protected backend: IBackEnd;
   protected serverConfig: IServerConfig;
   protected serviceId: string;
   protected isExecuting: boolean = false;
   protected statusUpdateInterval: number = 120000;
   protected requestCallbackTimeout: number = 30000;
-  private statusUpdateTimeoutId: NodeJS.Timeout | null = null;
-  private pendingRequests: Map<string, CallbackObject<any>> = new Map();
-  private requestHandlers: Map<string, RequestHandlerMetadata>;
+  readonly address: string;
   readonly serviceDiscoveryManager: ServiceDiscoveryManager;
+  readonly namespace: string;
 
   constructor(backend: IBackEnd, config: IServerConfig) {
     super(
@@ -199,8 +203,9 @@ export abstract class MicroserviceFramework<
     const logChannel = this.backend.pubSubConsumer.bindChannel(
       `${this.namespace}:${this.serviceId}:logs`
     );
-    const microserivceLogStrategy = new MicroserviceLogStrategy(logChannel);
-    Loggable.setLogStrategy(microserivceLogStrategy);
+    Loggable.setLogStrategy(
+      this.serverConfig.logStrategy || new MicroserviceLogStrategy(logChannel)
+    );
     this.info("Log Strategy set to MicroserviceLogStrategy");
     this.backend.pubSubConsumer.bindChannel(
       this.address,
@@ -232,7 +237,11 @@ export abstract class MicroserviceFramework<
     this.scheduleNextLoadLevelUpdate();
   }
 
-  protected async startDependencies() {}
+  protected async startDependencies() {
+    this.info(
+      `Service: ${this.serviceId} started successfully. InstanceID: ${this.instanceId}`
+    );
+  }
   protected async stopDependencies() {}
 
   static createRequest<T>(
@@ -712,5 +721,7 @@ export {
   PubSubConsumerOptions,
   MessageHandler,
   Loggable,
+  ConsoleStrategy,
+  logMethod,
 };
 export * from "./interfaces";

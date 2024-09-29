@@ -1,9 +1,10 @@
 import { IMessage, IBackEnd, ChannelBinding } from "./interfaces";
 import { RateLimitedTaskScheduler } from "./RateLimitedTaskScheduler";
-import { Loggable } from "./utils/logging/Loggable";
+import { Loggable, logMethod, ConsoleStrategy } from "./utils/logging/Loggable";
 import { ServiceDiscoveryManager } from "./ServiceDiscoveryManager";
 import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
+import { LogStrategy } from "./utils/logging/LogStrategy";
 import { ServerRunner } from "./ServerRunner";
 import { PubSubConsumer, PubSubConsumerOptions, MessageHandler } from "./PubSubConsumer";
 export declare function RequestHandler<T>(requestType: string): <M extends (arg: T) => Promise<any> | any>(target: any, propertyKey: string, descriptor: TypedPropertyDescriptor<M>) => void;
@@ -14,6 +15,7 @@ export interface IServerConfig {
     tpsInterval: number;
     serviceId: string;
     requestCallbackTimeout?: number;
+    logStrategy?: LogStrategy;
 }
 export interface ServiceStatus extends IServerConfig {
     instanceId: string;
@@ -40,21 +42,21 @@ export interface RequestProps {
     isBroadcast?: boolean;
 }
 export declare abstract class MicroserviceFramework<TRequestBody, TResponseData> extends RateLimitedTaskScheduler<IRequest<TRequestBody>, IResponse<TResponseData>> {
-    readonly namespace: string;
     private lobby;
     private serviceChannel;
+    private statusUpdateTimeoutId;
+    private pendingRequests;
+    private requestHandlers;
     protected broadcastChannel: ChannelBinding<IRequest<any>>;
-    readonly address: string;
     protected backend: IBackEnd;
     protected serverConfig: IServerConfig;
     protected serviceId: string;
     protected isExecuting: boolean;
     protected statusUpdateInterval: number;
     protected requestCallbackTimeout: number;
-    private statusUpdateTimeoutId;
-    private pendingRequests;
-    private requestHandlers;
+    readonly address: string;
     readonly serviceDiscoveryManager: ServiceDiscoveryManager;
+    readonly namespace: string;
     constructor(backend: IBackEnd, config: IServerConfig);
     initialize(): Promise<void>;
     private updateLoadLevel;
@@ -87,5 +89,5 @@ export declare abstract class MicroserviceFramework<TRequestBody, TResponseData>
     protected makeRequest<T>(props: RequestProps): Promise<IResponse<T>>;
     private generateRequestId;
 }
-export { ServerRunner, PubSubConsumer, PubSubConsumerOptions, MessageHandler, Loggable, };
+export { ServerRunner, PubSubConsumer, PubSubConsumerOptions, MessageHandler, Loggable, ConsoleStrategy, logMethod, };
 export * from "./interfaces";
