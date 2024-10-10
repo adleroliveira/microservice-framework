@@ -498,6 +498,7 @@ config = {
         this.getServerStatus()
       )
     );
+    this.info(`Service ${this.serviceId} [${this.instanceId}] checked out`);
     await this.stopDependencies();
     await this.serviceDiscoveryManager.unregisterNode(
       this.serviceId,
