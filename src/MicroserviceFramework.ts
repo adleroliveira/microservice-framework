@@ -491,17 +491,17 @@ config = {
 
   @Loggable.handleErrors
   async stop(): Promise<void> {
-    await this.stopDependencies();
-    await this.serviceDiscoveryManager.unregisterNode(
-      this.serviceId,
-      this.instanceId
-    );
     await this.lobby.send(
       MicroserviceFramework.createRequest(
         this.address,
         "CHECKOUT",
         this.getServerStatus()
       )
+    );
+    await this.stopDependencies();
+    await this.serviceDiscoveryManager.unregisterNode(
+      this.serviceId,
+      this.instanceId
     );
   }
 
