@@ -1,16 +1,16 @@
 import { Loggable, LogLevel } from "./utils/logging/Loggable";
 import { MicroserviceFramework } from "./MicroserviceFramework";
 export declare class ServerRunner extends Loggable {
-    private serviceId;
-    private serviceInstance;
+    private services;
     private logLevel;
-    private logStrategy;
-    constructor(serviceInstance: MicroserviceFramework<any, any>, logLevel?: LogLevel);
-    private inititalize;
+    private isStarted;
+    constructor(serviceInstanceOrLogLevel?: MicroserviceFramework<any, any> | LogLevel, logLevel?: LogLevel);
+    private initialize;
     private setLogStrategy;
+    registerService(serviceInstance: MicroserviceFramework<any, any>): void;
     private handleSigint;
     private handleShutdown;
     private handleUnhandledRejection;
-    stop(): void;
-    start(): void;
+    stop(): Promise<void>;
+    start(): Promise<void>;
 }

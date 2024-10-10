@@ -1,7 +1,10 @@
 import { IServiceRegistry } from "./interfaces";
+import { Loggable } from "./MicroserviceFramework";
 
-export class ServiceDiscoveryManager {
-  constructor(private registry: IServiceRegistry) {}
+export class ServiceDiscoveryManager extends Loggable {
+  constructor(private registry: IServiceRegistry) {
+    super();
+  }
 
   async registerNode(
     serviceId: string,
@@ -24,7 +27,42 @@ export class ServiceDiscoveryManager {
   }
 
   async getLeastLoadedNode(serviceId: string): Promise<string | null> {
-    return this.registry.getLeastLoadedNode(serviceId);
+    const leastLoadedNode = await this.registry.getLeastLoadedNode(serviceId);
+
+    if (leastLoadedNode) {
+      // Perform a health check on the node
+      const isNodeHealthy = await this.performHealthCheck(
+        serviceId,
+        leastLoadedNode
+      );
+
+      if (isNodeHealthy) {
+        return leastLoadedNode;
+      } else {
+        // If the node is not healthy, remove it from the registry
+        await this.unregisterNode(serviceId, leastLoadedNode);
+        // Recursively call getLeastLoadedNode to get the next least loaded node
+        return this.getLeastLoadedNode(serviceId);
+      }
+    }
+
+    return null;
+  }
+
+  private async performHealthCheck(
+    serviceId: string,
+    nodeId: string
+  ): Promise<boolean> {
+    try {
+      // TODO: Implement a method to determine if service is not stale
+      return true;
+    } catch (error: any) {
+      this.error(
+        `Health check failed for node ${nodeId} of service ${serviceId}:`,
+        error
+      );
+      return false;
+    }
   }
 
   async getAllNodes(

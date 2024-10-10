@@ -1,6 +1,7 @@
-import { IMessage, IBackEnd, ChannelBinding } from "./interfaces";
+import { IBackEnd, ChannelBinding } from "./interfaces";
 import { RateLimitedTaskScheduler } from "./RateLimitedTaskScheduler";
-import { Loggable, logMethod, ConsoleStrategy } from "./utils/logging/Loggable";
+import { Loggable, logMethod } from "./utils/logging/Loggable";
+import { ConsoleStrategy } from "./utils/logging/ConsoleStrategy";
 import { ServiceDiscoveryManager } from "./ServiceDiscoveryManager";
 import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
@@ -10,12 +11,14 @@ import { PubSubConsumer, PubSubConsumerOptions, MessageHandler } from "./PubSubC
 export declare function RequestHandler<T>(requestType: string): <M extends (arg: T) => Promise<any> | any>(target: any, propertyKey: string, descriptor: TypedPropertyDescriptor<M>) => void;
 export interface IServerConfig {
     namespace: string;
-    concurrencyLimit: number;
-    requestsPerInterval: number;
-    tpsInterval: number;
+    concurrencyLimit?: number;
+    requestsPerInterval?: number;
+    interval?: number;
+    tpsInterval?: number;
     serviceId: string;
     requestCallbackTimeout?: number;
     logStrategy?: LogStrategy;
+    statusUpdateInterval?: number;
 }
 export interface ServiceStatus extends IServerConfig {
     instanceId: string;
@@ -68,7 +71,8 @@ export declare abstract class MicroserviceFramework<TRequestBody, TResponseData>
     getserviceId(): string;
     getBackend(): IBackEnd;
     protected handleServiceMessages<T>(message: T): void;
-    protected handleLobbyMessages(message: IMessage<IRequest<ServiceStatus>>): Promise<void>;
+    protected handleLobbyMessages(message: IRequest<any> | IResponse<any>): Promise<void>;
+    private isServiceStatusRequest;
     private scheduleNextLoadLevelUpdate;
     private processRequest;
     private wrapAndProcessRequest;

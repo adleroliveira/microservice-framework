@@ -8,8 +8,8 @@ import {
   LoggableError,
   LogMessage,
   logMethod,
-  ConsoleStrategy,
 } from "./utils/logging/Loggable";
+import { ConsoleStrategy } from "./utils/logging/ConsoleStrategy";
 import { ServiceDiscoveryManager } from "./ServiceDiscoveryManager";
 import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
@@ -21,6 +21,7 @@ import {
   PubSubConsumerOptions,
   MessageHandler,
 } from "./PubSubConsumer";
+import chalk from "chalk";
 
 // Define a symbol for our metadata key
 const REQUEST_HANDLER_METADATA_KEY = Symbol("requestHandler");
@@ -83,12 +84,14 @@ function getRequestHandlers(target: any): Map<string, RequestHandlerMetadata> {
 
 export interface IServerConfig {
   namespace: string;
-  concurrencyLimit: number;
-  requestsPerInterval: number;
-  tpsInterval: number;
+  concurrencyLimit?: number;
+  requestsPerInterval?: number;
+  interval?: number;
+  tpsInterval?: number;
   serviceId: string;
   requestCallbackTimeout?: number;
   logStrategy?: LogStrategy;
+  statusUpdateInterval?: number;
 }
 
 export interface ServiceStatus extends IServerConfig {
@@ -170,14 +173,15 @@ export abstract class MicroserviceFramework<
 
   constructor(backend: IBackEnd, config: IServerConfig) {
     super(
-      config.concurrencyLimit,
-      config.requestsPerInterval,
-      config.tpsInterval
+      config.concurrencyLimit || 100,
+      config.requestsPerInterval || 100,
+      config.interval || 1000
     );
     this.namespace = config.namespace;
     this.serverConfig = config;
     this.backend = backend;
     this.serviceId = config.serviceId;
+    this.statusUpdateInterval = config.statusUpdateInterval || 120000;
     this.address = `${this.namespace}:${this.serviceId}:${this.instanceId}`;
     this.requestCallbackTimeout =
       config.requestCallbackTimeout || this.requestCallbackTimeout;
@@ -185,9 +189,9 @@ export abstract class MicroserviceFramework<
     this.serviceDiscoveryManager = new ServiceDiscoveryManager(
       this.backend.serviceRegistry
     );
-    this.initialize();
   }
 
+  // @Loggable.handleErrors
   async initialize() {
     this.serviceChannel = this.backend.pubSubConsumer.bindChannel(
       `${this.namespace}:${this.serviceId}`,
@@ -203,10 +207,27 @@ export abstract class MicroserviceFramework<
     const logChannel = this.backend.pubSubConsumer.bindChannel(
       `${this.namespace}:${this.serviceId}:logs`
     );
-    Loggable.setLogStrategy(
-      this.serverConfig.logStrategy || new MicroserviceLogStrategy(logChannel)
-    );
-    this.info("Log Strategy set to MicroserviceLogStrategy");
+    if (!this.serverConfig.logStrategy) {
+      Loggable.setLogStrategy(
+        this.serverConfig.logStrategy || new MicroserviceLogStrategy(logChannel)
+      );
+      console.warn(
+        chalk.yellow(`
+[WARNING]
+Log Strategy is set to MicroserviceLogStrategy.
+MicroserviceFramework will stream logs to ${this.namespace}:${this.serviceId}:logs channel
+If you are not seeing any logs, try adding the following to MicroserviceFramework configuration object:
+
+import { ConsoleStrategy } from "microservice-framework";
+config = {
+  ...,
+  logStrategy: new ConsoleStrategy()
+}
+      `)
+      );
+    } else {
+      Loggable.setLogStrategy(this.serverConfig.logStrategy);
+    }
     this.backend.pubSubConsumer.bindChannel(
       this.address,
       this.handleIncomingMessage.bind(this)
@@ -308,13 +329,19 @@ export abstract class MicroserviceFramework<
   protected handleServiceMessages<T>(message: T) {}
 
   protected async handleLobbyMessages(
-    message: IMessage<IRequest<ServiceStatus>>
+    message: IRequest<any> | IResponse<any>
   ): Promise<void> {
-    if (message.payload.header.requestType === "CHECKIN") {
-      this.info(
-        `Received CHECKIN from ${message.payload.header.requesterAddress}`
-      );
+    if (this.isServiceStatusRequest(message)) {
+      if (message.header.requestType === "CHECKIN") {
+        this.info(`Received CHECKIN from ${message.header.requesterAddress}`);
+      }
     }
+  }
+
+  private isServiceStatusRequest(
+    message: IRequest<any> | IResponse<any>
+  ): message is IRequest<ServiceStatus> {
+    return "header" in message && "requestType" in message.header;
   }
 
   private scheduleNextLoadLevelUpdate() {
@@ -391,13 +418,11 @@ export abstract class MicroserviceFramework<
   }
 
   private async handleIncomingMessage(
-    message: IMessage<IRequest<TRequestBody> | IResponse<any>>
+    payload: IRequest<TRequestBody> | IResponse<any>
   ): Promise<void> {
-    const payload = message.payload;
-
     // right now we don't wait to see if the acknowledgement succeeded.
     // we might want to do this in the future.
-    await this.backend.pubSubConsumer.ack(message);
+    await this.backend.pubSubConsumer.ack(payload);
 
     if (this.isResponse(payload)) {
       await this.handleResponse(payload);
@@ -426,7 +451,7 @@ export abstract class MicroserviceFramework<
           return;
         }
       }
-      this.scheduleNewMessage(message as IMessage<IRequest<TRequestBody>>);
+      this.scheduleNewMessage(payload as IRequest<TRequestBody>);
     }
   }
 
@@ -452,10 +477,10 @@ export abstract class MicroserviceFramework<
     }
   }
 
-  private scheduleNewMessage(message: IMessage<IRequest<TRequestBody>>) {
+  private scheduleNewMessage(message: IRequest<TRequestBody>) {
     this.scheduleTask(
       async (input) => await this.wrapAndProcessRequest(input),
-      message.payload
+      message
     );
   }
 

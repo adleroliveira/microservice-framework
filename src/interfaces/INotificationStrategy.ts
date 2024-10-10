@@ -26,7 +26,6 @@ export interface IBindableNotificationStrategy<T>
   bindToAddress(address: string): IBindableNotificationStrategy<T>;
 }
 
-// TODO: Remove 'any' and make it type safe using IMessage interface
 export interface ChannelBinding<T> {
   send: (message: T) => Promise<void>;
   unsubscribe: () => Promise<void>;

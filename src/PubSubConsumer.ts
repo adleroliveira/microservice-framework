@@ -1,7 +1,7 @@
-import { IPubSubClient, IMessage } from "./interfaces";
+import { IPubSubClient } from "./interfaces";
 import { EventEmitter } from "events";
 
-export type MessageHandler<T> = (message: IMessage<T>) => void;
+export type MessageHandler<T> = (message: T) => void;
 
 export interface ChannelBinding<T> {
   send: (message: T) => Promise<void>;
@@ -102,12 +102,7 @@ export class PubSubConsumer<T = any> extends EventEmitter {
 
     if (this.echoPublished && this.subscribedChannels.has(channel)) {
       const handler = this.subscribedChannels.get(channel)!;
-      const messageWrapper: IMessage<T> = {
-        id: this.generateMessageId(message),
-        payload: message,
-        timestamp: Date.now(),
-      };
-      handler(messageWrapper);
+      handler(message);
     }
   }
 
@@ -144,11 +139,11 @@ export class PubSubConsumer<T = any> extends EventEmitter {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  async ack(message: IMessage<T>): Promise<void> {
+  async ack(message: T): Promise<void> {
     // Implementation depends on your specific requirements
   }
 
-  async nack(message: IMessage<T>): Promise<void> {
+  async nack(message: T): Promise<void> {
     // Implementation depends on your specific requirements
   }
 

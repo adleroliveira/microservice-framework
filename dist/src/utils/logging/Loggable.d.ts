@@ -1,5 +1,5 @@
 import { IQueueStrategy } from "../../interfaces";
-import { ConsoleStrategy, LogStrategy } from "./LogStrategy";
+import { LogStrategy } from "./LogStrategy";
 /**
  * Enum representing different log levels.
  */
@@ -96,7 +96,7 @@ export declare abstract class Loggable {
      * Sets the log strategy.
      * @param {LogStrategy} strategy - The new log strategy to use.
      */
-    static setLogStrategy(strategy: LogStrategy): void;
+    static setLogStrategy(strategy?: LogStrategy): void;
     /**
      * Sets the queue strategy.
      * @param {IQueueStrategy<LogMessage>} strategy - The new queue strategy to use.
@@ -175,4 +175,4 @@ export declare abstract class Loggable {
      */
     static shutdown(): Promise<void>;
 }
-export { logMethod, ConsoleStrategy };
+export { logMethod };

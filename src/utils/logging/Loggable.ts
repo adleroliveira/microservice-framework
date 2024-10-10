@@ -1,5 +1,6 @@
 import { IQueueStrategy } from "../../interfaces";
-import { ConsoleStrategy, LogStrategy } from "./LogStrategy";
+import { LogStrategy } from "./LogStrategy";
+import { ConsoleStrategy } from "./ConsoleStrategy";
 import { InMemoryQueueStrategy } from "../queue/InMemoryQueueStrategy";
 import util from "util";
 
@@ -179,7 +180,7 @@ export class LoggableError extends Error {
  * Abstract base class for objects that can log messages.
  */
 export abstract class Loggable {
-  public static logStrategy: LogStrategy = new ConsoleStrategy();
+  public static logStrategy: LogStrategy;
   private static queueStrategy: IQueueStrategy<LogMessage> =
     new InMemoryQueueStrategy<LogMessage>();
   private static logLevel: LogLevel = LogLevel.INFO;
@@ -229,7 +230,7 @@ export abstract class Loggable {
       timestamp = new Date(message.timestamp).toISOString().slice(0, -5);
     } catch (error) {
       // Handle invalid date
-      console.error(`Invalid timestamp: ${message.timestamp}`);
+      console.error(`Invalid timestamp: ${message.timestamp}`, message);
       timestamp = "Invalid Date";
     }
 
@@ -290,6 +291,7 @@ export abstract class Loggable {
    * @throws {Error} If the class is not initialized.
    */
   protected constructor() {
+    Loggable.setLogStrategy();
     if (!Loggable.isProcessing) {
       Loggable.startProcessing();
     }
@@ -299,7 +301,9 @@ export abstract class Loggable {
    * Sets the log strategy.
    * @param {LogStrategy} strategy - The new log strategy to use.
    */
-  public static setLogStrategy(strategy: LogStrategy): void {
+  public static setLogStrategy(
+    strategy: LogStrategy = new ConsoleStrategy()
+  ): void {
     Loggable.logStrategy = strategy;
   }
 
@@ -588,4 +592,4 @@ function formatPayloadContent(payload: LogPayload): string {
   return util.inspect(truncatedContent, { depth: null, colors: true });
 }
 
-export { logMethod, ConsoleStrategy };
+export { logMethod };

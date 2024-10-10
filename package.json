@@ -1,6 +1,6 @@
 {
   "name": "microservice-framework",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "TypeScript-based framework designed to simplify the creation and management of microservices",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",

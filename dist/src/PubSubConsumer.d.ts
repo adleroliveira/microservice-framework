@@ -1,6 +1,6 @@
-import { IPubSubClient, IMessage } from "./interfaces";
+import { IPubSubClient } from "./interfaces";
 import { EventEmitter } from "events";
-export type MessageHandler<T> = (message: IMessage<T>) => void;
+export type MessageHandler<T> = (message: T) => void;
 export interface ChannelBinding<T> {
     send: (message: T) => Promise<void>;
     unsubscribe: () => Promise<void>;
@@ -24,7 +24,7 @@ export declare class PubSubConsumer<T = any> extends EventEmitter {
     bindChannel(channel: string, handler?: MessageHandler<T>): ChannelBinding<T>;
     protected setupChannelHandler(channel: string, handler: MessageHandler<T>): void;
     protected generateMessageId(message: T): string;
-    ack(message: IMessage<T>): Promise<void>;
-    nack(message: IMessage<T>): Promise<void>;
+    ack(message: T): Promise<void>;
+    nack(message: T): Promise<void>;
     isRunning(): boolean;
 }

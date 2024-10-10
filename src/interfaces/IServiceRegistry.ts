@@ -15,5 +15,5 @@ export interface IServiceRegistry {
     serviceId: string
   ): Promise<Array<{ nodeId: string; load: number }>>;
   getOnlineServices(): Promise<string[]>;
-  isServiceOnline(serviceId: string): Promise<boolean>; // New method
+  isServiceOnline(serviceId: string): Promise<boolean>;
 }

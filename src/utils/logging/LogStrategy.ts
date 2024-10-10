@@ -1,15 +1,15 @@
-import { Loggable } from "../logging/Loggable";
 import { IRequest, IRequestHeader } from "../../interfaces";
 import { v4 as uuidv4 } from "uuid";
 
 export abstract class LogStrategy {
   protected MAX_STRING_LENGTH?: number;
   protected MAX_DEPTH?: number;
-
   protected abstract sendPackaged(
     packagedMessage: IRequest<any>,
     options?: Record<string, any>
   ): Promise<void>;
+
+  constructor() {}
 
   async send(message: any, options?: Record<string, any>): Promise<void> {
     const truncatedMessage = LogStrategy.truncateAndStringify(
@@ -85,26 +85,5 @@ export abstract class LogStrategy {
     }
 
     return "[Unserializable data]";
-  }
-}
-
-export class ConsoleStrategy extends LogStrategy {
-  constructor(maxStringLength?: number, maxDepth?: number) {
-    super();
-    if (maxStringLength) this.MAX_STRING_LENGTH = maxStringLength;
-    if (maxDepth) this.MAX_DEPTH = maxDepth;
-  }
-
-  protected async sendPackaged(
-    packagedMessage: IRequest<any>,
-    options?: Record<string, any>
-  ): Promise<void> {
-    const formattedMessage = Loggable.FormatLogMessage(packagedMessage.body);
-    console.log(formattedMessage);
-
-    // If there are additional options, log them separately
-    if (options && Object.keys(options).length > 0) {
-      console.log("Additional options:", options);
-    }
   }
 }
