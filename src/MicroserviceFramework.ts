@@ -1,32 +1,18 @@
-import { IMessage, IBackEnd, ChannelBinding } from "./interfaces";
+import { IBackEnd, ChannelBinding } from "./interfaces";
 import {
   RateLimitedTaskScheduler,
   TaskOutput,
-} from "./RateLimitedTaskScheduler";
-import {
-  Loggable,
-  LoggableError,
-  LogMessage,
-  logMethod,
-} from "./utils/logging/Loggable";
-import { ConsoleStrategy } from "./utils/logging/ConsoleStrategy";
-import { ServiceDiscoveryManager } from "./ServiceDiscoveryManager";
+} from "./core//RateLimitedTaskScheduler";
+import { Loggable, LoggableError, LogMessage } from "./logging";
+import { ServiceDiscoveryManager } from "./core//ServiceDiscoveryManager";
 import { IRequest, IResponse, IRequestHeader } from "./interfaces";
 import "reflect-metadata";
 import { v4 as uuidv4 } from "uuid";
-import { LogStrategy } from "./utils/logging/LogStrategy";
-import { ServerRunner } from "./ServerRunner";
-import {
-  PubSubConsumer,
-  PubSubConsumerOptions,
-  MessageHandler,
-} from "./PubSubConsumer";
+import { LogStrategy } from "./logging/LogStrategy";
 import chalk from "chalk";
 
-// Define a symbol for our metadata key
 const REQUEST_HANDLER_METADATA_KEY = Symbol("requestHandler");
 
-// Define an interface for the metadata we'll store
 interface RequestHandlerMetadata {
   requestType: string;
   method: string;
@@ -40,8 +26,7 @@ type IsFullRequest<T> = T extends IRequest<any> ? true : false;
 function isFullRequestHandler<T>(): boolean {
   return {} as IsFullRequest<T> as boolean;
 }
-
-// Create the decorator
+// Decorator
 export function RequestHandler<T>(requestType: string) {
   return function <M extends (arg: T) => Promise<any> | any>(
     target: any,
@@ -124,8 +109,8 @@ export interface RequestProps {
   isBroadcast?: boolean;
 }
 
-type CallbackFunction<T> = (response: IResponse<T>) => Promise<void>;
-type CallbackObject<T> = {
+export type CallbackFunction<T> = (response: IResponse<T>) => Promise<void>;
+export type CallbackObject<T> = {
   callback: CallbackFunction<T>;
   timeoutCallback: () => void;
   handleStatusUpdate: (
@@ -135,7 +120,7 @@ type CallbackObject<T> = {
   timeOutId: NodeJS.Timeout;
 };
 
-class MicroserviceLogStrategy extends LogStrategy {
+export class MicroserviceLogStrategy extends LogStrategy {
   constructor(private logChannel: ChannelBinding<IRequest<LogMessage>>) {
     super();
   }
@@ -164,7 +149,7 @@ export abstract class MicroserviceFramework<
   protected backend: IBackEnd;
   protected serverConfig: IServerConfig;
   protected serviceId: string;
-  protected isExecuting: boolean = false;
+  protected running: boolean = false;
   protected statusUpdateInterval: number = 120000;
   protected requestCallbackTimeout: number = 30000;
   readonly address: string;
@@ -304,7 +289,7 @@ config = {
     };
   }
 
-  private getServerStatus(): ServiceStatus {
+  protected getServerStatus(): ServiceStatus {
     const status = {
       ...this.serverConfig,
       instanceId: this.instanceId,
@@ -338,6 +323,14 @@ config = {
     }
   }
 
+  protected async defaultMessageHandler(
+    request: IRequest<TRequestBody>
+  ): Promise<TResponseData> {
+    throw new Error(
+      `No handler found for request type: ${request.header.requestType}`
+    );
+  }
+
   private isServiceStatusRequest(
     message: IRequest<any> | IResponse<any>
   ): message is IRequest<ServiceStatus> {
@@ -364,7 +357,7 @@ config = {
 
     const handlerMetadata = this.requestHandlers.get(requestType);
     if (!handlerMetadata) {
-      throw new Error(`No handler found for request type: ${requestType}`);
+      return await this.defaultMessageHandler(input);
     }
 
     // Call the handler method
@@ -487,6 +480,7 @@ config = {
   @Loggable.handleErrors
   async start(): Promise<void> {
     await this.startDependencies();
+    this.running = true;
   }
 
   @Loggable.handleErrors
@@ -504,6 +498,8 @@ config = {
       this.serviceId,
       this.instanceId
     );
+
+    this.running = false;
   }
 
   private async processAndNotify(
@@ -740,14 +736,3 @@ config = {
       .substr(2, 9)}`;
   }
 }
-
-export {
-  ServerRunner,
-  PubSubConsumer,
-  PubSubConsumerOptions,
-  MessageHandler,
-  Loggable,
-  ConsoleStrategy,
-  logMethod,
-};
-export * from "./interfaces";

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/index.ts"],
+  "sourcesContent": ["export * from \"./MicroserviceFramework\";\nexport * from \"./ServerRunner\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;AAAA;AAAA;AAAA,wBAAc,oCAAd;AACA,wBAAc,2BADd;",
+  "names": []
+}

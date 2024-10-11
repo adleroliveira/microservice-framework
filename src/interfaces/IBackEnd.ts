@@ -1,5 +1,5 @@
 import { IServiceRegistry, IRequest, IResponse } from "./";
-import { PubSubConsumer } from "../PubSubConsumer";
+import { PubSubConsumer } from "../core/PubSubConsumer";
 
 export interface IBackEnd {
   serviceRegistry: IServiceRegistry;

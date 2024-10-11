@@ -1,4 +1,4 @@
-import { Loggable, LogLevel } from "./utils/logging/Loggable";
+import { Loggable, LogLevel } from "./logging";
 import { MicroserviceFramework } from "./MicroserviceFramework";
 
 Loggable.setLogLevel(Loggable.LogLevel.INFO);

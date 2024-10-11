@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/browser/index.ts"],
+  "sourcesContent": ["export * from \"./WebSocketManager\";\nexport * from \"./BrowserConsoleStrategy\";\nexport * from \"./CommunicationsManager\";\nexport * from \"./WebSocketManager\";\n"],
+  "mappings": "AAAA,cAAc;AACd,cAAc;AACd,cAAc;AACd,cAAc;",
+  "names": []
+}

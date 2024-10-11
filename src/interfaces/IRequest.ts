@@ -4,6 +4,7 @@ export interface IRequestHeader {
   requesterAddress: string;
   recipientAddress?: string;
   requestType?: string;
+  authToken?: string;
 }
 
 export interface IRequest<T> {

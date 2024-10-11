@@ -2,7 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "target": "ES2020",
-    "module": "commonjs",
+    "module": "CommonJS",
     "esModuleInterop": true,
     "lib": ["es2020", "dom"],
     "declaration": true,
@@ -23,8 +23,8 @@
     "typeRoots": ["./node_modules/@types"],
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "outDir": "./dist",
-    "rootDir": "."
+    "outDir": "./dist/types",
+    "rootDir": "./src"
   },
   "exclude": ["node_modules", "dist"],
   "include": ["src"]

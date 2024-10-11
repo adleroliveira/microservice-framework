@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Frontend Example</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      #messageContainer {
+        height: 300px;
+        border: 1px solid #ccc;
+        overflow-y: scroll;
+        margin-bottom: 10px;
+        padding: 10px;
+      }
+      #messageInput {
+        width: 70%;
+        padding: 5px;
+      }
+      #sendButton {
+        width: 25%;
+        padding: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WebSocket Frontend Example</h1>
+    <div id="messageContainer"></div>
+    <input type="text" id="messageInput" placeholder="Type a message..." />
+    <button id="sendButton">Send</button>
+
+    <script src="/bundle.js"></script>
+    <script>
+      const messageContainer = document.getElementById("messageContainer");
+      const messageInput = document.getElementById("messageInput");
+      const sendButton = document.getElementById("sendButton");
+
+      const commManager = new MicroserviceFramework.CommunicationsManager({
+        url: "ws://localhost:8083/ws",
+      });
+
+      commManager.onOpen(function () {
+        addMessage("Connected to WebSocket server");
+      });
+
+      commManager.onClose(function () {
+        addMessage("Disconnected from WebSocket server");
+      });
+
+      commManager.onError(function (error) {
+        addMessage(`Error: ${error.message}`);
+      });
+
+      sendButton.onclick = function () {
+        const message = messageInput.value;
+        if (message) {
+          addMessage(`Sent: ${message}`);
+          messageInput.value = "";
+          commManager.request("/echo", message).then((response) => {
+            addMessage(`Received: ${response.data}`);
+          });
+        }
+      };
+
+      messageInput.onkeypress = function (event) {
+        if (event.keyCode === 13) {
+          // Enter key
+          sendButton.click();
+        }
+      };
+
+      function addMessage(message) {
+        const messageElement = document.createElement("div");
+        messageElement.textContent = message;
+        messageContainer.appendChild(messageElement);
+        messageContainer.scrollTop = messageContainer.scrollHeight;
+      }
+    </script>
+  </body>
+</html>
