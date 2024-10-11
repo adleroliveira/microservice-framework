@@ -5,8 +5,8 @@ import {
   IServerConfig,
   StatusUpdate,
   RequestHandler,
-} from "../../MicroserviceFramework";
-import { IBackEnd, IRequest, IResponse } from "../../interfaces";
+} from "../MicroserviceFramework";
+import { IBackEnd, IRequest, IResponse } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
 
 type PayloadType = "object" | "string" | "IRequest" | "IResponse";

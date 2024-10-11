@@ -3,11 +3,8 @@ import url from "url";
 import zlib from "zlib";
 import path from "path";
 import fs from "fs/promises";
-import {
-  MicroserviceFramework,
-  IServerConfig,
-} from "../../MicroserviceFramework";
-import { IBackEnd, IRequest } from "../../interfaces";
+import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
+import { IBackEnd, IRequest } from "../interfaces";
 
 export type HttpRequest = {
   method: string;

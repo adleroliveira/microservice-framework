@@ -1,12 +1,7 @@
-import { IPubSubClient } from "../interfaces";
+import { IPubSubClient, ChannelBinding } from "../interfaces";
 import { EventEmitter } from "events";
 
 export type MessageHandler<T> = (message: T) => void;
-
-export interface ChannelBinding<T> {
-  send: (message: T) => Promise<void>;
-  unsubscribe: () => Promise<void>;
-}
 
 export interface PubSubConsumerOptions {
   echoPublished?: boolean;

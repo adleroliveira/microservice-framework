@@ -1,4 +1,4 @@
-import { WebSocketServer, WebSocketServerConfig } from "../../services/web";
+import { WebSocketServer, WebSocketServerConfig } from "../../services";
 import { IBackEnd, IRequest } from "../../interfaces";
 export declare class ExampleWebSocketServer extends WebSocketServer {
     constructor(backend: IBackEnd, config: WebSocketServerConfig);

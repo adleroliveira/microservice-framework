@@ -1,5 +1,5 @@
-import { MicroserviceFramework, IServerConfig } from "../../MicroserviceFramework";
-import { IBackEnd, IRequest } from "../../interfaces";
+import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
+import { IBackEnd, IRequest } from "../interfaces";
 export type HttpRequest = {
     method: string;
     path: string;

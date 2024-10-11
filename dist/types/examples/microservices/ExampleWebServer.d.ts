@@ -1,4 +1,4 @@
-import { WebServer, HttpRequest, HttpResponse, WebServerConfig } from "../../services/web/WebServer";
+import { WebServer, HttpRequest, HttpResponse, WebServerConfig } from "../../services/WebServer";
 import { IBackEnd } from "../../interfaces";
 export declare class ExampleWebServer extends WebServer {
     constructor(backend: IBackEnd, config: WebServerConfig);

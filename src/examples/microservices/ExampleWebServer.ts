@@ -3,7 +3,7 @@ import {
   HttpRequest,
   HttpResponse,
   WebServerConfig,
-} from "../../services/web/WebServer";
+} from "../../services/WebServer";
 import { RequestHandler } from "../../MicroserviceFramework";
 import { IBackEnd } from "../../interfaces";
 

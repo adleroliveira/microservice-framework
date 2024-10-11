@@ -1,4 +1,4 @@
-import { WebSocketServer, WebSocketServerConfig } from "../../services/web";
+import { WebSocketServer, WebSocketServerConfig } from "../../services";
 
 import { RequestHandler } from "../../MicroserviceFramework";
 import { IBackEnd, IRequest } from "../../interfaces";
