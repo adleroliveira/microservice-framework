@@ -41,16 +41,16 @@ esbuild
   })
   .catch(() => process.exit(1));
 
-// Build for browser (ES modules, not bundled)
+// Build for browser (ES modules, bundled)
 esbuild
   .build({
     entryPoints: ["src/browser/index.ts"],
-    outdir: "dist/browser-esm",
+    outfile: "dist/browser-esm/index.js",
     format: "esm",
     target: ["es2020"],
     platform: "browser",
     tsconfig: "tsconfig.json",
-    bundle: false,
+    bundle: true,
     minify: false,
     sourcemap: true,
   })
