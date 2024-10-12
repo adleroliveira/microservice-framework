@@ -149,6 +149,7 @@ export abstract class Loggable {
   private static processingTimeout: NodeJS.Timeout | null = null;
   static LogLevel = LogLevel;
   protected static LoggableError = LoggableError;
+  private static shutdownPromise: Promise<void> | null = null;
   protected static DefaultLoggableError = class extends Error {
     public readonly payload: any;
     public readonly originalError: Error | undefined;
@@ -399,6 +400,7 @@ export abstract class Loggable {
         className
       );
       Loggable.queueStrategy.enqueue(logMessage);
+      Loggable.wakeUpQueue();
     }
   }
 
@@ -512,21 +514,35 @@ export abstract class Loggable {
       }
     }
     Loggable.isProcessing = false;
+
+    // If there's no more messages and we're shutting down, resolve the shutdown promise
+    if (
+      Loggable.shutdownPromise &&
+      Loggable.queueStrategy.dequeue() === undefined
+    ) {
+      Loggable.resolveShutdown();
+    } else {
+      // Schedule the next processing cycle
+      Loggable.scheduleNextProcessing();
+    }
+  }
+
+  private static scheduleNextProcessing(): void {
+    if (Loggable.processingTimeout) {
+      clearTimeout(Loggable.processingTimeout);
+    }
+    Loggable.processingTimeout = setTimeout(() => {
+      Loggable.processQueue();
+    }, 100);
   }
 
   /**
    * Starts processing the queue of log messages.
    */
   private static startProcessing(): void {
-    const scheduleProcessing = () => {
-      Loggable.processingTimeout = setTimeout(() => {
-        Loggable.processQueue().finally(() => {
-          scheduleProcessing();
-        });
-      }, 100); // Adjust this delay as needed
-    };
-
-    scheduleProcessing();
+    if (!Loggable.isProcessing && !Loggable.processingTimeout) {
+      Loggable.scheduleNextProcessing();
+    }
   }
 
   /**
@@ -535,7 +551,30 @@ export abstract class Loggable {
   public static async shutdown(): Promise<void> {
     if (Loggable.processingTimeout) {
       clearTimeout(Loggable.processingTimeout);
-      await Loggable.waitForEmptyQueue();
+      Loggable.processingTimeout = null;
+    }
+
+    if (!Loggable.shutdownPromise) {
+      Loggable.shutdownPromise = new Promise<void>((resolve) => {
+        Loggable.resolveShutdown = resolve;
+      });
+
+      // Process any remaining messages
+      await Loggable.processQueue();
+    }
+
+    return Loggable.shutdownPromise;
+  }
+
+  private static resolveShutdown: () => void = () => {};
+
+  public static wakeUpQueue(): void {
+    if (
+      !Loggable.isProcessing &&
+      !Loggable.processingTimeout &&
+      !Loggable.shutdownPromise
+    ) {
+      Loggable.startProcessing();
     }
   }
 }

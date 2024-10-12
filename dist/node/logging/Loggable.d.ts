@@ -30,6 +30,7 @@ export declare abstract class Loggable {
     private static processingTimeout;
     static LogLevel: typeof LogLevel;
     protected static LoggableError: typeof LoggableError;
+    private static shutdownPromise;
     protected static DefaultLoggableError: {
         new (message: string, payload?: any, originalError?: Error): {
             readonly payload: any;
@@ -134,6 +135,7 @@ export declare abstract class Loggable {
      * @returns {Promise<void>} A promise that resolves when processing is complete.
      */
     private static processQueue;
+    private static scheduleNextProcessing;
     /**
      * Starts processing the queue of log messages.
      */
@@ -142,5 +144,7 @@ export declare abstract class Loggable {
      * Shuts down the logging system.
      */
     static shutdown(): Promise<void>;
+    private static resolveShutdown;
+    static wakeUpQueue(): void;
 }
 export { logMethod };

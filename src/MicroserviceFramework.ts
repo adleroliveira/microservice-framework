@@ -512,7 +512,8 @@ config = {
   ): Promise<void> {
     // FIXME: DO NOT LOG WITHIN THIS METHOD, it causes infinite loop!
     if (output.result) {
-      if (output.result.requestHeader.recipientAddress) {
+      const recipientAddress = output.result.requestHeader.recipientAddress;
+      if (recipientAddress) {
         await this.sendNotification(output.result);
       }
     }
@@ -523,6 +524,11 @@ config = {
   ): Promise<void> {
     const recipientId = response.requestHeader.recipientAddress;
     if (recipientId) {
+      const [_namespace, serviceId, _instanceId] = recipientId.split(":");
+      if (serviceId && serviceId === this.serviceId) {
+        this.processIncomingMessage(response);
+        return;
+      }
       const peer = this.backend.pubSubConsumer.bindChannel(recipientId);
       peer.send(response);
       // TODO: validate if peer exists before sending message
