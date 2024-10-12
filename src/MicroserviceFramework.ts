@@ -416,7 +416,12 @@ config = {
     // right now we don't wait to see if the acknowledgement succeeded.
     // we might want to do this in the future.
     await this.backend.pubSubConsumer.ack(payload);
+    this.processIncomingMessage(payload);
+  }
 
+  private async processIncomingMessage(
+    payload: IRequest<TRequestBody> | IResponse<any>
+  ): Promise<void> {
     if (this.isResponse(payload)) {
       await this.handleResponse(payload);
     } else {
@@ -717,8 +722,11 @@ config = {
           handleStatusUpdate || this.handleStatusUpdate.bind(this),
       });
       const peer = this.backend.pubSubConsumer.bindChannel(peerAddress);
-
-      peer.send(request).catch((error: any) => {
+      const sendMethod =
+        to == this.serviceId
+          ? this.processIncomingMessage.bind(this)
+          : peer.send;
+      sendMethod(request).catch((error: any) => {
         this.pendingRequests.delete(requestId);
         this.error(`Failed to send request to ${to}`, {
           error,

@@ -90,6 +90,7 @@ export declare abstract class MicroserviceFramework<TRequestBody, TResponseData>
     protected enrichResponse(response: IResponse<TResponseData>, originalRequest: IRequest<TRequestBody>): IResponse<TResponseData>;
     protected enrichRequest(header: IRequestHeader, body: any): IRequestHeader;
     private handleIncomingMessage;
+    private processIncomingMessage;
     private isResponse;
     private handleResponse;
     private scheduleNewMessage;
