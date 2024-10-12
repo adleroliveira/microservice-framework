@@ -103,15 +103,7 @@ export abstract class RateLimitedTaskScheduler<TIn, TOut> extends Loggable {
   }
 
   private canInitiateTask(): boolean {
-    this.updateWindowState(); // Ensure window state is current
-    console.log(
-      `tasksInitiatedInWindow: ${this.tasksInitiatedInWindow}, runningTasks: ${
-        this.runningTasks
-      }, Can Initiate: ${
-        this.tasksInitiatedInWindow < this.tasksPerInterval &&
-        this.runningTasks < this.concurrencyLimit
-      }`
-    );
+    this.updateWindowState();
     return (
       this.tasksInitiatedInWindow < this.tasksPerInterval &&
       this.runningTasks < this.concurrencyLimit
