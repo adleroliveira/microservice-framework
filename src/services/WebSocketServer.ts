@@ -25,6 +25,7 @@ export interface WebSocketServerConfig extends IServerConfig {
 export type WebSocketMessage = {
   type: string;
   data: any;
+  connectionId: string;
 };
 
 export interface WebSocketResponse {}
@@ -113,8 +114,15 @@ export class WebSocketServer extends MicroserviceFramework<
         const response = await this.makeRequest<any>({
           to: request.header.recipientAddress || this.serviceId,
           requestType: request.header.requestType || "unknown",
-          body: request.body,
-          headers: { ...request.header, requestId: request.header.requestId },
+          body: {
+            connectionId: connection.getConnectionId(),
+            type: request.header.requestType || "unknown",
+            body: request.body,
+          },
+          headers: {
+            ...request.header,
+            requestId: request.header.requestId,
+          },
           handleStatusUpdate: async (
             updateRequest: IRequest<any>,
             status: StatusUpdate
@@ -184,13 +192,17 @@ export class WebSocketServer extends MicroserviceFramework<
     };
   }
 
+  protected getConnections(): Map<string, WebsocketConnection> {
+    return this.connections;
+  }
+
   @RequestHandler<string>("raw")
   protected async rawMessageHandler(message: string): Promise<string> {
     this.warn(`Received raw message`, message);
     return "ERROR: Raw messages not supported. Please use CommunicationsManager";
   }
 
-  public broadcast(message: WebSocketMessage): void {
+  public broadcast(message: IRequest<WebSocketMessage>): void {
     const messageString = JSON.stringify(message);
     this.connections.forEach((connection) => {
       connection.send(messageString);
@@ -199,7 +211,7 @@ export class WebSocketServer extends MicroserviceFramework<
 
   public sendToConnection(
     connectionId: string,
-    message: WebSocketMessage
+    message: IResponse<WebSocketMessage>
   ): void {
     const connection = this.connections.get(connectionId);
     if (connection) {

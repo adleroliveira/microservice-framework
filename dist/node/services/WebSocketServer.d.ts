@@ -1,5 +1,6 @@
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
-import { IBackEnd, IRequest } from "../interfaces";
+import { IBackEnd, IRequest, IResponse } from "../interfaces";
+import { WebsocketConnection } from "./WebsocketConnection";
 export interface WebSocketServerConfig extends IServerConfig {
     port: number;
     path?: string;
@@ -8,6 +9,7 @@ export interface WebSocketServerConfig extends IServerConfig {
 export type WebSocketMessage = {
     type: string;
     data: any;
+    connectionId: string;
 };
 export interface WebSocketResponse {
 }
@@ -25,7 +27,8 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     protected startDependencies(): Promise<void>;
     protected stopDependencies(): Promise<void>;
     protected defaultMessageHandler(request: IRequest<WebSocketMessage>): Promise<WebSocketResponse>;
+    protected getConnections(): Map<string, WebsocketConnection>;
     protected rawMessageHandler(message: string): Promise<string>;
-    broadcast(message: WebSocketMessage): void;
-    sendToConnection(connectionId: string, message: WebSocketMessage): void;
+    broadcast(message: IRequest<WebSocketMessage>): void;
+    sendToConnection(connectionId: string, message: IResponse<WebSocketMessage>): void;
 }
