@@ -22,4 +22,5 @@ export declare class CommunicationsManager extends EventEmitter {
     private handleMaxReconnectAttemptsReached;
     private validateConfig;
     request<I, O>(requestType: string, body: I, to?: string): Promise<IResponseData<O>>;
+    registerMessageHandler(messageType: string, handler: (data: any) => void): void;
 }

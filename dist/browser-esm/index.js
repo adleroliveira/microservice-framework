@@ -683,6 +683,9 @@ var CommunicationsManager = class extends eventemitter3_default {
       throw error;
     }
   }
+  registerMessageHandler(messageType, handler) {
+    this.requestManager.on(messageType, handler);
+  }
 };
 export {
   BrowserConsoleStrategy,

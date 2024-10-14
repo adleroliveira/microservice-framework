@@ -94,4 +94,11 @@ export class CommunicationsManager extends EventEmitter {
       throw error;
     }
   }
+
+  public registerMessageHandler(
+    messageType: string,
+    handler: (data: any) => void
+  ) {
+    this.requestManager.on(messageType, handler);
+  }
 }
