@@ -1,5 +1,5 @@
 import EventEmitter from "eventemitter3";
-import { WebSocketManager } from "./WebSocketManager";
+import { WebSocketManager, WebSocketState } from "./WebSocketManager";
 import { BrowserConsoleStrategy } from "./BrowserConsoleStrategy";
 import { RequestManager } from "./RequestManager";
 import { IResponseData } from "../interfaces";
@@ -100,5 +100,9 @@ export class CommunicationsManager extends EventEmitter {
     handler: (data: any) => void
   ) {
     this.requestManager.on(messageType, handler);
+  }
+
+  public getConnectionState(): WebSocketState {
+    return this.webSocketManager.getState();
   }
 }

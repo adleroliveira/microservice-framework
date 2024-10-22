@@ -400,12 +400,12 @@ _BrowserConsoleStrategy.LOG_COLORS = {
 var BrowserConsoleStrategy = _BrowserConsoleStrategy;
 
 // src/browser/WebSocketManager.ts
-var WebSocketState = /* @__PURE__ */ ((WebSocketState2) => {
-  WebSocketState2[WebSocketState2["CONNECTING"] = 0] = "CONNECTING";
-  WebSocketState2[WebSocketState2["OPEN"] = 1] = "OPEN";
-  WebSocketState2[WebSocketState2["CLOSING"] = 2] = "CLOSING";
-  WebSocketState2[WebSocketState2["CLOSED"] = 3] = "CLOSED";
-  return WebSocketState2;
+var WebSocketState = /* @__PURE__ */ ((WebSocketState3) => {
+  WebSocketState3[WebSocketState3["CONNECTING"] = 0] = "CONNECTING";
+  WebSocketState3[WebSocketState3["OPEN"] = 1] = "OPEN";
+  WebSocketState3[WebSocketState3["CLOSING"] = 2] = "CLOSING";
+  WebSocketState3[WebSocketState3["CLOSED"] = 3] = "CLOSED";
+  return WebSocketState3;
 })(WebSocketState || {});
 var WebSocketManager = class extends eventemitter3_default {
   constructor(url, secure = false, maxReconnectAttempts = 5, reconnectInterval = 5e3, connectionTimeout = 1e4) {
@@ -685,6 +685,9 @@ var CommunicationsManager = class extends eventemitter3_default {
   }
   registerMessageHandler(messageType, handler) {
     this.requestManager.on(messageType, handler);
+  }
+  getConnectionState() {
+    return this.webSocketManager.getState();
   }
 };
 export {

@@ -38,9 +38,9 @@ export abstract class RateLimitedTaskScheduler<TIn, TOut> extends Loggable {
     super();
     if (interval <= 0) throw new Error("Interval must be greater than 0");
     this.instanceId = Math.random().toString(36).slice(2, 11);
-    this.debug(
-      `Scheduler initialized with concurrencyLimit: ${concurrencyLimit}, tasksPerInterval: ${tasksPerInterval}, interval: ${interval}ms`
-    );
+    // this.debug(
+    //   `Scheduler initialized with concurrencyLimit: ${concurrencyLimit}, tasksPerInterval: ${tasksPerInterval}, interval: ${interval}ms`
+    // );
   }
 
   protected createDeferredTask(
@@ -90,7 +90,7 @@ export abstract class RateLimitedTaskScheduler<TIn, TOut> extends Loggable {
       this.initiateTask(deferredTask);
     } else {
       this.queue.enqueue(deferredTask);
-      this.debug(`Task enqueued. Current queue size: ${this.queue.size()}`);
+      // this.debug(`Task enqueued. Current queue size: ${this.queue.size()}`);
     }
   }
 
@@ -130,7 +130,7 @@ export abstract class RateLimitedTaskScheduler<TIn, TOut> extends Loggable {
       };
       this.taskProcessedCount++;
       const endTime = Date.now();
-      this.debug(`Task completed. Execution time: ${endTime - startTime}ms`);
+      // this.debug(`Task completed. Execution time: ${endTime - startTime}ms`);
       this.emitter.emit("taskComplete", result);
     } catch (error: any) {
       result = {
@@ -176,7 +176,7 @@ export abstract class RateLimitedTaskScheduler<TIn, TOut> extends Loggable {
         () => this.checkAndProcessTasks(),
         Math.min(this.interval, 1000)
       );
-      this.debug("Timer started");
+      // this.debug("Timer started");
     }
   }
 
@@ -188,7 +188,7 @@ export abstract class RateLimitedTaskScheduler<TIn, TOut> extends Loggable {
     ) {
       clearInterval(this.windowCheckInterval);
       this.windowCheckInterval = null;
-      this.debug("Timer stopped");
+      // this.debug("Timer stopped");
     }
   }
 

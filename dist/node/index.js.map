@@ -1,7 +1,7 @@
 {
   "version": 3,
   "sources": ["../../src/index.ts"],
-  "sourcesContent": ["export * from \"./MicroserviceFramework\";\nexport * from \"./ServerRunner\";\nexport * from \"./browser\";\nexport * from \"./core\";\nexport * from \"./interfaces\";\nexport * from \"./logging\";\nexport * from \"./services\";\n"],
-  "mappings": ";;;;;;;;;;;;;;;AAAA;AAAA;AAAA,wBAAc,oCAAd;AACA,wBAAc,2BADd;AAEA,wBAAc,sBAFd;AAGA,wBAAc,mBAHd;AAIA,wBAAc,yBAJd;AAKA,wBAAc,sBALd;AAMA,wBAAc,uBANd;",
+  "sourcesContent": ["export * from \"./MicroserviceFramework\";\nexport * from \"./ServerRunner\";\nexport * from \"./browser\";\nexport * from \"./core\";\nexport * from \"./interfaces\";\nexport * from \"./logging\";\nexport * from \"./services\";\nexport * from \"./examples/backend\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;AAAA;AAAA;AAAA,wBAAc,oCAAd;AACA,wBAAc,2BADd;AAEA,wBAAc,sBAFd;AAGA,wBAAc,mBAHd;AAIA,wBAAc,yBAJd;AAKA,wBAAc,sBALd;AAMA,wBAAc,uBANd;AAOA,wBAAc,+BAPd;",
   "names": []
 }

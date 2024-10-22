@@ -1,4 +1,5 @@
 import EventEmitter from "eventemitter3";
+import { WebSocketState } from "./WebSocketManager";
 import { IResponseData } from "../interfaces";
 export interface ICommunicationsManagerConfig {
     url: string;
@@ -23,4 +24,5 @@ export declare class CommunicationsManager extends EventEmitter {
     private validateConfig;
     request<I, O>(requestType: string, body: I, to?: string): Promise<IResponseData<O>>;
     registerMessageHandler(messageType: string, handler: (data: any) => void): void;
+    getConnectionState(): WebSocketState;
 }
