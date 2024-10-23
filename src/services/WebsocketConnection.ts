@@ -9,6 +9,7 @@ export class WebsocketConnection {
   private metadata: Map<string, any> = new Map();
   private websocket: WebSocket | null = null;
   private eventListenersSetup: boolean = false;
+  private closePromise: Promise<void> | null = null;
 
   constructor(
     private handleMessage: (
@@ -108,10 +109,38 @@ export class WebsocketConnection {
     return this.authenticated;
   }
 
-  public close(code?: number, reason?: string) {
-    if (this.websocket) {
-      this.websocket.close(code, reason);
+  public close(code?: number, reason?: string): Promise<void> {
+    if (!this.closePromise) {
+      this.closePromise = new Promise((resolve) => {
+        if (!this.websocket) {
+          resolve();
+          return;
+        }
+
+        // Handle the case where the socket is already closed
+        if (this.websocket.readyState === WebSocket.CLOSED) {
+          resolve();
+          return;
+        }
+
+        // Listen for the close event
+        const onClose = () => {
+          this.websocket?.removeListener('close', onClose);
+          resolve();
+        };
+
+        this.websocket.on('close', onClose);
+        this.websocket.close(code, reason);
+
+        // Safeguard: resolve after 5 seconds even if we don't get a close event
+        setTimeout(() => {
+          this.websocket?.removeListener('close', onClose);
+          resolve();
+        }, 5000);
+      });
     }
+
+    return this.closePromise;
   }
 
   public ping() {
@@ -152,5 +181,9 @@ export class WebsocketConnection {
         connection.send(message);
       }
     });
+  }
+
+  public getSessionId(): string | undefined {
+    return this.getMetadata("sessionId");
   }
 }

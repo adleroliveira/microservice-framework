@@ -1,6 +1,7 @@
 import { Server, Data } from "ws";
 import { createServer, Server as HttpServer, IncomingMessage } from "http";
 import { Duplex } from "stream";
+import { ISessionData } from "../interfaces";
 
 import {
   MicroserviceFramework,
@@ -176,8 +177,16 @@ export class WebSocketServer extends MicroserviceFramework<
     });
   }
 
-  private async handleMessage(data: Data, connection: WebsocketConnection) {
+  private async refreshSession(connection: WebsocketConnection): Promise<void> {
+    if (this.requiresAuthentication) {
+      await connection.refreshSession(this.sessionStore!);
+    }
+  }
+
+  private async handleMessage(data: Data, connection: WebsocketConnection): Promise<void> {
     try {
+      await this.refreshSession(connection);
+      // TODO: handle expired sessions
       const strData = data.toString();
       const detectionResult = detectAndCategorizeMessage(strData);
       let requestType: string = "";
@@ -208,6 +217,8 @@ export class WebSocketServer extends MicroserviceFramework<
 
       if (detectionResult.payloadType == "IRequest") {
         const request = detectionResult.payload as IRequest<any>;
+        // TODO: handle non-authenticated Requests
+        // TODO: handle authorization
         const response = await this.makeRequest<any>({
           to: request.header.recipientAddress || this.serviceId,
           requestType: request.header.requestType || "unknown",
@@ -219,6 +230,7 @@ export class WebSocketServer extends MicroserviceFramework<
           headers: {
             ...request.header,
             requestId: request.header.requestId,
+            sessionId: connection.getSessionId()
           },
           handleStatusUpdate: async (
             updateRequest: IRequest<any>,
@@ -255,24 +267,31 @@ export class WebSocketServer extends MicroserviceFramework<
   }
 
   protected async stopDependencies(): Promise<void> {
-    return new Promise((resolve) => {
-      // Close all active connections
-      this.info("Closing all active WebSocket connections...");
-      for (const connection of this.connections.values()) {
-        connection.close(1000, "Server shutting down");
-      }
-
-      // Wait for a short time to allow connections to close
-      setTimeout(() => {
-        // Close the WebSocket server
-        this.wss.close(() => {
-          // Close the HTTP server
-          this.server.close(() => {
-            this.info("WebSocket server stopped");
-            resolve();
+    return new Promise(async (resolve) => {
+      try {
+        // Close all active connections and wait for them to complete
+        this.info("Closing all active WebSocket connections...");
+        await Promise.all(
+          Array.from(this.connections.values()).map(connection =>
+            connection.close(1000, "Server shutting down")
+          )
+        );
+  
+        // Close the WebSocket server and HTTP server
+        await new Promise<void>(resolveWss => {
+          this.wss.close(() => {
+            this.server.close(() => {
+              this.info("WebSocket server stopped");
+              resolveWss();
+            });
           });
         });
-      }, 1000); // Wait for 1 second before closing servers
+  
+        resolve();
+      } catch (error: any) {
+        this.error("Error during shutdown:", error);
+        resolve(); // Still resolve to ensure shutdown completes
+      }
     });
   }
 
@@ -316,6 +335,10 @@ export class WebSocketServer extends MicroserviceFramework<
     } else {
       this.warn(`Connection not found: ${connectionId}`);
     }
+  }
+
+  async getSessionById(sessionId: string): Promise<ISessionData | null> {
+    return this.sessionStore? this.sessionStore.get(sessionId) : null;
   }
 }
 

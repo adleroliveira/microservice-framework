@@ -3,4 +3,5 @@ export interface InMemoryUser {
     username: string;
     passwordHash: string;
     metadata?: Record<string, unknown>;
+    createdAt?: Date;
 }

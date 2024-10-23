@@ -10,7 +10,7 @@ import { LoggableError } from "../logging";
 
 interface Credentials {
   username: string;
-  credentials: string;
+  password: string;
 }
 
 export class WebSocketAuthenticationMiddleware extends AuthenticationMiddleware {
@@ -36,7 +36,7 @@ export class WebSocketAuthenticationMiddleware extends AuthenticationMiddleware 
       // Fall back to credentials if no token or token invalid
       const credentials = await this.extractCredentials(request);
       const result = await this.authProvider.authenticate(credentials);
-      this.debug("Authentication Result", result);
+      
       if (result.success) {
         await this.attachSessionToConnection(connection, result);
         return result;
@@ -92,7 +92,7 @@ export class WebSocketAuthenticationMiddleware extends AuthenticationMiddleware 
 
     return {
       username,
-      credentials: decodeURIComponent(atob(paddedCredentials)),
+      password: decodeURIComponent(atob(paddedCredentials)),
     };
   }
 

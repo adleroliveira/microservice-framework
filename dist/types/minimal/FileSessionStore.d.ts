@@ -1,10 +1,12 @@
-import { ISessionData, ISessionStore } from "src/interfaces";
+import { ISessionData, ISessionStore } from "../interfaces";
 export declare class FileSessionStore implements ISessionStore {
     private store;
     private sessions;
     private cleanupInterval;
     constructor(dataDir?: string, cleanupIntervalMs?: number);
     initialize(): Promise<void>;
+    private loadSessions;
+    private performInitialCleanup;
     private persistSessions;
     create(sessionData: ISessionData): Promise<string>;
     get(sessionId: string): Promise<ISessionData | null>;

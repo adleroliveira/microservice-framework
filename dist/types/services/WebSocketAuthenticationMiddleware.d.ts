@@ -4,7 +4,7 @@ import { WebsocketConnection } from "./WebsocketConnection";
 import { IncomingMessage } from "http";
 interface Credentials {
     username: string;
-    credentials: string;
+    password: string;
 }
 export declare class WebSocketAuthenticationMiddleware extends AuthenticationMiddleware {
     authenticateConnection(request: IncomingMessage, connection: WebsocketConnection): Promise<IAuthenticationResult>;

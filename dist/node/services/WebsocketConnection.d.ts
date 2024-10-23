@@ -12,6 +12,7 @@ export declare class WebsocketConnection {
     private metadata;
     private websocket;
     private eventListenersSetup;
+    private closePromise;
     constructor(handleMessage: (data: WebSocket.Data, websocket: WebsocketConnection) => void, handleClose: (connectionId: string) => void, inactivityTimeout?: number, // 5 minutes
     maxMessagesPerMinute?: number, websocket?: WebSocket);
     setWebSocket(websocket: WebSocket): void;
@@ -25,7 +26,7 @@ export declare class WebsocketConnection {
     getConnectionId(): string;
     setAuthenticated(value: boolean): void;
     isAuthenticated(): boolean;
-    close(code?: number, reason?: string): void;
+    close(code?: number, reason?: string): Promise<void>;
     ping(): void;
     isConnected(): boolean;
     setMetadata(key: string, value: any): void;

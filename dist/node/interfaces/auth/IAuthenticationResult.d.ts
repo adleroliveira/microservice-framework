@@ -1,6 +1,7 @@
 export interface IAuthenticationResult {
     success: boolean;
     userId?: string;
+    username?: string;
     sessionId?: string;
     token?: string;
     refreshToken?: string;

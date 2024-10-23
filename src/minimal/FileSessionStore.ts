@@ -1,6 +1,6 @@
 import { FileStore } from "./FileStore";
-import { ISessionData, ISessionStore } from "src/interfaces";
-import { CryptoUtil } from "src/utils";
+import { ISessionData, ISessionStore } from "../interfaces";
+import { CryptoUtil } from "../utils";
 
 export class FileSessionStore implements ISessionStore {
   private store: FileStore;
@@ -19,7 +19,11 @@ export class FileSessionStore implements ISessionStore {
 
   async initialize(): Promise<void> {
     await this.store.initialize();
+    await this.loadSessions();
+    await this.performInitialCleanup();
+  }
 
+  private async loadSessions() {
     // Load sessions from file
     const sessionData = await this.store.read<{
       sessions: Array<[string, ISessionData]>;
@@ -34,6 +38,32 @@ export class FileSessionStore implements ISessionStore {
           lastAccessedAt: new Date(data.lastAccessedAt),
         });
       });
+    }
+  }
+
+  private async performInitialCleanup(): Promise<void> {
+    const now = new Date();
+    let changed = false;
+  
+    // Clean up expired sessions
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (session.expiresAt < now) {
+        this.sessions.delete(sessionId);
+        changed = true;
+      }
+    }
+  
+    // Clean up sessions that haven't been accessed in a long time (e.g., 30 days)
+    const unusedThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (session.lastAccessedAt < unusedThreshold) {
+        this.sessions.delete(sessionId);
+        changed = true;
+      }
+    }
+  
+    if (changed) {
+      await this.persistSessions();
     }
   }
 

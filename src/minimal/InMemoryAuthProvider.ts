@@ -35,12 +35,12 @@ export class InMemoryAuthProvider implements IAuthenticationProvider {
     password: string;
   }): Promise<IAuthenticationResult> {
     const user = this.users.get(credentials.username);
-    console.log("user", user);
     if (!user) {
       return { success: false, error: "User not found" };
     }
 
     const passwordHash = await CryptoUtil.hashPassword(credentials.password);
+  
     if (passwordHash !== user.passwordHash) {
       return { success: false, error: "Invalid password" };
     }
