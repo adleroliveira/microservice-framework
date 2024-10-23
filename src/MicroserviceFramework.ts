@@ -291,13 +291,19 @@ config = {
 
   protected getServerStatus(): ServiceStatus {
     const status = {
-      ...this.serverConfig,
+      namespace: this.namespace,
       instanceId: this.instanceId,
       pendingRequests: this.pendingRequests.size,
       queueSize: this.queue.size(),
       runningTasks: this.runningTasks,
       timestamp: Date.now(),
       address: this.address,
+      concurrencyLimit: this.concurrencyLimit,
+      requestsPerInterval: this.serverConfig.requestsPerInterval,
+      interval: this.interval,
+      serviceId: this.serviceId,
+      requestCallbackTimeout: this.requestCallbackTimeout,
+      statusUpdateInterval: this.statusUpdateInterval,
     };
 
     return status;
