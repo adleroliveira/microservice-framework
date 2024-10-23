@@ -1,7 +1,18 @@
 import WebSocket from "ws";
 import { ISessionStore } from "../interfaces";
+import { createHash } from "crypto";
+
+interface ConnectionEvents {
+  onRateLimit: (connectionId: string) => void;
+  onError: (connectionId: string, error: Error) => void;
+  onSecurityViolation: (connectionId: string, violation: string) => void;
+}
 
 export class WebsocketConnection {
+  private static readonly MAX_MESSAGE_SIZE = 1024 * 1024; // 1MB
+  private static readonly SESSION_REFRESH_INTERVAL = 60000; // 1 minute
+  private static readonly FORCED_CLOSE_TIMEOUT = 5000; // 5 seconds
+
   private connectionId: string;
   private lastActivityTime: number;
   private messageCount: number = 0;
@@ -10,6 +21,8 @@ export class WebsocketConnection {
   private websocket: WebSocket | null = null;
   private eventListenersSetup: boolean = false;
   private closePromise: Promise<void> | null = null;
+  private sessionRefreshTimer?: NodeJS.Timeout;
+  private lastMessageHash: string = "";
 
   constructor(
     private handleMessage: (
@@ -19,6 +32,7 @@ export class WebsocketConnection {
     private handleClose: (connectionId: string) => void,
     private inactivityTimeout: number = 300000, // 5 minutes
     private maxMessagesPerMinute: number = 100,
+    private events?: ConnectionEvents,
     websocket?: WebSocket
   ) {
     this.connectionId = crypto.randomUUID();
@@ -32,9 +46,27 @@ export class WebsocketConnection {
   }
 
   public setWebSocket(websocket: WebSocket) {
+    if (this.websocket) {
+      // Clean up existing connection first
+      this.cleanupExistingConnection();
+    }
+
     this.websocket = websocket;
     this.setupEventListeners();
     this.lastActivityTime = Date.now();
+
+    (this.websocket as any).maxPayload = WebsocketConnection.MAX_MESSAGE_SIZE;
+  }
+
+  private cleanupExistingConnection() {
+    if (this.websocket) {
+      try {
+        this.websocket.removeAllListeners();
+        this.websocket.terminate();
+      } catch (error) {
+        this.events?.onError(this.connectionId, error as Error);
+      }
+    }
   }
 
   private setupEventListeners() {
@@ -45,16 +77,36 @@ export class WebsocketConnection {
     this.websocket.on("message", this.handleWebsocketMessages.bind(this));
     this.websocket.on("close", this.handleCloseConnection.bind(this));
     this.websocket.on("pong", this.handlePong.bind(this));
+    this.websocket.on("error", this.handleError.bind(this));
+
+    this.websocket.on(
+      "unexpected-response",
+      this.handleUnexpectedResponse.bind(this)
+    );
 
     this.eventListenersSetup = true;
   }
 
+  private handleError(error: Error) {
+    this.events?.onError(this.connectionId, error);
+    this.close(1006, "Internal error occurred");
+  }
+
+  private handleUnexpectedResponse() {
+    this.events?.onSecurityViolation(
+      this.connectionId,
+      "Unexpected response received"
+    );
+    this.close(1006, "Unexpected response");
+  }
+
   private startInactivityTimer() {
     setInterval(() => {
-      if (Date.now() - this.lastActivityTime > this.inactivityTimeout) {
+      const now = Date.now();
+      if (now - this.lastActivityTime > this.inactivityTimeout) {
         this.close(1000, "Connection timed out due to inactivity");
       }
-    }, 60000); // Check every minute
+    }, 60000); // check every minute
   }
 
   private handlePong() {
@@ -65,22 +117,101 @@ export class WebsocketConnection {
     if (!this.websocket) {
       throw new Error("Cannot send message: WebSocket not initialized");
     }
-    this.websocket.send(message);
-    this.lastActivityTime = Date.now();
+
+    try {
+      // Check message size before sending
+      const messageSize = Buffer.byteLength(message);
+      if (messageSize > WebsocketConnection.MAX_MESSAGE_SIZE) {
+        throw new Error("Message exceeds maximum size limit");
+      }
+
+      this.websocket.send(message);
+      this.lastActivityTime = Date.now();
+    } catch (error) {
+      this.events?.onError(this.connectionId, error as Error);
+      throw error;
+    }
   }
 
   private handleCloseConnection() {
     this.handleClose(this.connectionId);
   }
 
-  private handleWebsocketMessages(message: WebSocket.Data) {
-    this.lastActivityTime = Date.now();
-    if (this.isRateLimited()) {
-      this.send("Rate limit exceeded. Please slow down.");
-      return;
+  private async handleWebsocketMessages(message: WebSocket.Data) {
+    try {
+      this.lastActivityTime = Date.now();
+
+      // Size check
+      const messageSize = this.getDataSize(message);
+      if (messageSize > WebsocketConnection.MAX_MESSAGE_SIZE) {
+        this.events?.onSecurityViolation(
+          this.connectionId,
+          "Message size exceeded"
+        );
+        this.send(JSON.stringify({ error: "Message too large" }));
+        return;
+      }
+
+      // Rate limiting
+      if (this.isRateLimited()) {
+        this.events?.onRateLimit(this.connectionId);
+        this.send(JSON.stringify({ error: "Rate limit exceeded" }));
+        return;
+      }
+
+      // Detect message replay attacks
+      const messageString = this.dataToString(message);
+      const messageHash = this.calculateMessageHash(messageString);
+      if (messageHash === this.lastMessageHash) {
+        this.events?.onSecurityViolation(
+          this.connectionId,
+          "Possible replay attack"
+        );
+        return;
+      }
+      this.lastMessageHash = messageHash;
+
+      this.messageCount++;
+      this.handleMessage(message, this);
+    } catch (error) {
+      this.events?.onError(this.connectionId, error as Error);
     }
-    this.messageCount++;
-    this.handleMessage(message, this);
+  }
+
+  private calculateMessageHash(message: string): string {
+    return createHash("sha256").update(message).digest("hex");
+  }
+
+  private dataToString(data: WebSocket.Data): string {
+    if (typeof data === "string") {
+      return data;
+    }
+    if (data instanceof Buffer) {
+      return data.toString();
+    }
+    if (data instanceof ArrayBuffer) {
+      return Buffer.from(data).toString();
+    }
+    if (Array.isArray(data)) {
+      return Buffer.concat(data).toString();
+    }
+    return "";
+  }
+
+  private getDataSize(data: WebSocket.Data): number {
+    if (typeof data === "string") {
+      return Buffer.byteLength(data);
+    }
+    if (data instanceof Buffer) {
+      return data.length;
+    }
+    if (data instanceof ArrayBuffer) {
+      return data.byteLength;
+    }
+    if (Array.isArray(data)) {
+      return data.reduce((acc, buf) => acc + buf.length, 0);
+    }
+    return 0;
   }
 
   private isRateLimited(): boolean {
@@ -112,31 +243,30 @@ export class WebsocketConnection {
   public close(code?: number, reason?: string): Promise<void> {
     if (!this.closePromise) {
       this.closePromise = new Promise((resolve) => {
+        this.stopSessionRefresh();
+
         if (!this.websocket) {
           resolve();
           return;
         }
 
-        // Handle the case where the socket is already closed
         if (this.websocket.readyState === WebSocket.CLOSED) {
           resolve();
           return;
         }
 
-        // Listen for the close event
-        const onClose = () => {
-          this.websocket?.removeListener('close', onClose);
+        const cleanup = () => {
+          this.cleanupExistingConnection();
           resolve();
         };
 
-        this.websocket.on('close', onClose);
+        this.websocket.on("close", cleanup);
         this.websocket.close(code, reason);
 
-        // Safeguard: resolve after 5 seconds even if we don't get a close event
+        // Force close after timeout
         setTimeout(() => {
-          this.websocket?.removeListener('close', onClose);
-          resolve();
-        }, 5000);
+          cleanup();
+        }, WebsocketConnection.FORCED_CLOSE_TIMEOUT);
       });
     }
 
@@ -163,15 +293,42 @@ export class WebsocketConnection {
     return this.metadata.get(key);
   }
 
-  async refreshSession(sessionStore: ISessionStore): Promise<boolean> {
-    const sessionId = this.getMetadata("sessionId");
-    if (!sessionId) return false;
+  public async refreshSession(sessionStore: ISessionStore): Promise<boolean> {
+    try {
+      const sessionId = this.getMetadata("sessionId");
+      if (!sessionId) return false;
 
-    const session = await sessionStore.get(sessionId);
-    if (!session) return false;
+      const session = await sessionStore.get(sessionId);
+      if (!session) {
+        // Session invalid - close connection
+        this.close(1008, "Session expired");
+        return false;
+      }
 
-    session.lastAccessedAt = new Date();
-    return sessionStore.update(sessionId, session);
+      session.lastAccessedAt = new Date();
+      return sessionStore.update(sessionId, session);
+    } catch (error) {
+      this.events?.onError(this.connectionId, error as Error);
+      return false;
+    }
+  }
+
+  public startSessionRefresh(sessionStore: ISessionStore) {
+    if (this.sessionRefreshTimer) {
+      clearInterval(this.sessionRefreshTimer);
+    }
+
+    this.sessionRefreshTimer = setInterval(
+      () => this.refreshSession(sessionStore),
+      WebsocketConnection.SESSION_REFRESH_INTERVAL
+    );
+  }
+
+  public stopSessionRefresh() {
+    if (this.sessionRefreshTimer) {
+      clearInterval(this.sessionRefreshTimer);
+      this.sessionRefreshTimer = undefined;
+    }
   }
 
   // Static method for broadcasting to multiple connections

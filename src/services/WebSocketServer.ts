@@ -170,11 +170,39 @@ export class WebSocketServer extends MicroserviceFramework<
           this.handleClose.bind(this),
           undefined, // default timeout
           undefined, // default rate limit
+          this.handleWsEvents(),
           ws
         );
         this.connections.set(connection.getConnectionId(), connection);
       }
     });
+  }
+
+  private handleWsEvents() {
+    return {
+      onRateLimit: (connectionId: string) => {
+        this.warn(`Rate limit exceeded for connection ${connectionId}`);
+        const connection = this.connections.get(connectionId);
+        if (connection) {
+          connection.close(1008, "Rate limit exceeded");
+          this.connections.delete(connectionId);
+        }
+      },
+      onError: (connectionId: string, error: Error) => {
+        this.warn(`Error for connection ${connectionId}: ${error.message}`);
+        // TODO: handle connection erros
+      },
+      onSecurityViolation: (connectionId: string, violation: string) => {
+        this.warn(
+          `Security violation for connection ${connectionId}: ${violation}`
+        );
+        const connection = this.connections.get(connectionId);
+        if (connection) {
+          connection.close(1008, "Security violation");
+          this.connections.delete(connectionId);
+        }
+      },
+    };
   }
 
   private async refreshSession(connection: WebsocketConnection): Promise<void> {
@@ -183,7 +211,10 @@ export class WebSocketServer extends MicroserviceFramework<
     }
   }
 
-  private async handleMessage(data: Data, connection: WebsocketConnection): Promise<void> {
+  private async handleMessage(
+    data: Data,
+    connection: WebsocketConnection
+  ): Promise<void> {
     try {
       await this.refreshSession(connection);
       // TODO: handle expired sessions
@@ -230,7 +261,7 @@ export class WebSocketServer extends MicroserviceFramework<
           headers: {
             ...request.header,
             requestId: request.header.requestId,
-            sessionId: connection.getSessionId()
+            sessionId: connection.getSessionId(),
           },
           handleStatusUpdate: async (
             updateRequest: IRequest<any>,
@@ -272,13 +303,13 @@ export class WebSocketServer extends MicroserviceFramework<
         // Close all active connections and wait for them to complete
         this.info("Closing all active WebSocket connections...");
         await Promise.all(
-          Array.from(this.connections.values()).map(connection =>
+          Array.from(this.connections.values()).map((connection) =>
             connection.close(1000, "Server shutting down")
           )
         );
-  
+
         // Close the WebSocket server and HTTP server
-        await new Promise<void>(resolveWss => {
+        await new Promise<void>((resolveWss) => {
           this.wss.close(() => {
             this.server.close(() => {
               this.info("WebSocket server stopped");
@@ -286,7 +317,7 @@ export class WebSocketServer extends MicroserviceFramework<
             });
           });
         });
-  
+
         resolve();
       } catch (error: any) {
         this.error("Error during shutdown:", error);
@@ -338,7 +369,7 @@ export class WebSocketServer extends MicroserviceFramework<
   }
 
   async getSessionById(sessionId: string): Promise<ISessionData | null> {
-    return this.sessionStore? this.sessionStore.get(sessionId) : null;
+    return this.sessionStore ? this.sessionStore.get(sessionId) : null;
   }
 }
 

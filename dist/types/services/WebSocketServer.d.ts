@@ -33,6 +33,7 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     constructor(backend: IBackEnd, config: WebSocketServerConfig);
     private setupWebSocketServer;
     private upgradeConnection;
+    private handleWsEvents;
     private refreshSession;
     private handleMessage;
     private handleClose;
