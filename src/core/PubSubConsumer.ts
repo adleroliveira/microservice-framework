@@ -93,7 +93,7 @@ export class PubSubConsumer<T = any> extends EventEmitter {
       throw new Error(`Channel ${channel} is not registered for publishing`);
     }
 
-    await this.client.publish(channel, JSON.stringify(message));
+    await this.client.publish(channel, safeStringify(message));
 
     if (this.echoPublished && this.subscribedChannels.has(channel)) {
       const handler = this.subscribedChannels.get(channel)!;
@@ -144,5 +144,82 @@ export class PubSubConsumer<T = any> extends EventEmitter {
 
   public isRunning(): boolean {
     return this.running;
+  }
+}
+
+function safeStringify(
+  value: any,
+  options: {
+    fallback?: string;
+    maxDepth?: number;
+    classInstanceHandler?: (instance: any) => string;
+  } = {}
+): string {
+  const {
+    fallback = "[Object]",
+    maxDepth = 3,
+    classInstanceHandler = (instance: any) => {
+      const className = instance.constructor?.name || "Object";
+      // Try to get an ID or name property, common in many classes
+      const identifier = instance.id || instance.name || "";
+      return `[${className}${identifier ? `:${identifier}` : ""}]`;
+    },
+  } = options;
+
+  try {
+    const seen = new WeakSet();
+
+    const serializer = (key: string, value: any, depth = 0): any => {
+      // Handle null and undefined
+      if (value === null || value === undefined) {
+        return value;
+      }
+
+      // Handle primitive types
+      if (typeof value !== "object") {
+        return value;
+      }
+
+      // Check for circular reference
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+
+      // Check depth limit
+      if (depth >= maxDepth) {
+        return "[Nested]";
+      }
+
+      // Handle class instances (non-plain objects)
+      if (value.constructor && value.constructor !== Object) {
+        return classInstanceHandler(value);
+      }
+
+      // Handle Date objects
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+
+      // Handle arrays
+      if (Array.isArray(value)) {
+        seen.add(value);
+        const result = value.map((item) => serializer("", item, depth + 1));
+        seen.delete(value);
+        return result;
+      }
+
+      // Handle plain objects
+      seen.add(value);
+      const result = Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [k, serializer(k, v, depth + 1)])
+      );
+      seen.delete(value);
+      return result;
+    };
+
+    return JSON.stringify(value, (key, value) => serializer(key, value));
+  } catch (error) {
+    console.error("Stringification failed:", error);
+    return fallback;
   }
 }
