@@ -1,10 +1,16 @@
+import { ISessionData } from "../interfaces";
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
-import { IBackEnd, IRequest, IResponse } from "../interfaces";
+import { IBackEnd, IRequest, IResponse, ISessionStore, IAuthenticationProvider } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
+import { WebSocketAuthenticationMiddleware } from "./WebSocketAuthenticationMiddleware";
 export interface WebSocketServerConfig extends IServerConfig {
     port: number;
     path?: string;
     maxConnections?: number;
+    requiresAuthentication?: boolean;
+    authProvider?: IAuthenticationProvider;
+    sessionStore?: ISessionStore;
+    authenticationMiddleware?: WebSocketAuthenticationMiddleware;
 }
 export type WebSocketMessage = {
     type: string;
@@ -20,8 +26,14 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     private port;
     private path;
     private maxConnections;
+    private authProvider;
+    private sessionStore;
+    private authenticationMiddleware;
+    private requiresAuthentication;
     constructor(backend: IBackEnd, config: WebSocketServerConfig);
     private setupWebSocketServer;
+    private upgradeConnection;
+    private refreshSession;
     private handleMessage;
     private handleClose;
     protected startDependencies(): Promise<void>;
@@ -31,4 +43,5 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     protected rawMessageHandler(message: string): Promise<string>;
     broadcast(message: IRequest<WebSocketMessage>): void;
     sendToConnection(connectionId: string, message: IResponse<WebSocketMessage>): void;
+    getSessionById(sessionId: string): Promise<ISessionData | null>;
 }

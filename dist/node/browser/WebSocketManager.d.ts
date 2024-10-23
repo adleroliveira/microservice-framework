@@ -5,21 +5,46 @@ export declare enum WebSocketState {
     CLOSING = 2,
     CLOSED = 3
 }
+export declare enum AuthMethod {
+    TOKEN = "token",
+    CREDENTIALS = "auth"
+}
+export interface IWebSocketAuthConfig {
+    method: AuthMethod;
+    token?: string;
+    credentials?: {
+        username: string;
+        password: string;
+    };
+}
+export interface IWebSocketManagerConfig {
+    url: string;
+    secure?: boolean;
+    auth?: IWebSocketAuthConfig;
+    maxReconnectAttempts?: number;
+    reconnectInterval?: number;
+    connectionTimeout?: number;
+}
 export declare class WebSocketManager extends EventEmitter {
     private logger;
     private ws;
     private url;
     private secure;
+    private auth?;
     private reconnectAttempts;
     private maxReconnectAttempts;
     private reconnectInterval;
     private state;
     private connectionTimeout;
     private connectionTimer?;
-    constructor(url: string, secure?: boolean, maxReconnectAttempts?: number, reconnectInterval?: number, connectionTimeout?: number);
+    private protocols;
+    constructor(config: IWebSocketManagerConfig);
+    private setupAuthProtocols;
     private connect;
+    private handleConnectionError;
     private getSecureUrl;
     private setHooks;
+    private checkAuthRequirement;
     private handleReconnection;
     private setConnectionTimeout;
     private clearConnectionTimeout;
@@ -29,4 +54,7 @@ export declare class WebSocketManager extends EventEmitter {
     reconnect(): void;
     getState(): WebSocketState;
     getReadyState(): number;
+    setAuthConfig(authConfig: IWebSocketAuthConfig): void;
+    isAuthenticated(): boolean;
+    reconnectWithNewAuth(authConfig: IWebSocketAuthConfig): void;
 }

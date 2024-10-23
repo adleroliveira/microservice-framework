@@ -1,32 +1,52 @@
 import WebSocket from "ws";
-import { v4 as uuidv4 } from "uuid";
+import { ISessionStore } from "../interfaces";
 
 export class WebsocketConnection {
   private connectionId: string;
   private lastActivityTime: number;
   private messageCount: number = 0;
   private authenticated: boolean = false;
+  private metadata: Map<string, any> = new Map();
+  private websocket: WebSocket | null = null;
+  private eventListenersSetup: boolean = false;
+  private closePromise: Promise<void> | null = null;
 
   constructor(
-    private websocket: WebSocket,
     private handleMessage: (
       data: WebSocket.Data,
       websocket: WebsocketConnection
     ) => void,
     private handleClose: (connectionId: string) => void,
     private inactivityTimeout: number = 300000, // 5 minutes
-    private maxMessagesPerMinute: number = 100
+    private maxMessagesPerMinute: number = 100,
+    websocket?: WebSocket
   ) {
-    this.connectionId = uuidv4();
+    this.connectionId = crypto.randomUUID();
     this.lastActivityTime = Date.now();
-    this.setupEventListeners();
+
+    if (websocket) {
+      this.setWebSocket(websocket);
+    }
+
     this.startInactivityTimer();
   }
 
+  public setWebSocket(websocket: WebSocket) {
+    this.websocket = websocket;
+    this.setupEventListeners();
+    this.lastActivityTime = Date.now();
+  }
+
   private setupEventListeners() {
+    if (!this.websocket || this.eventListenersSetup) {
+      return;
+    }
+
     this.websocket.on("message", this.handleWebsocketMessages.bind(this));
     this.websocket.on("close", this.handleCloseConnection.bind(this));
     this.websocket.on("pong", this.handlePong.bind(this));
+
+    this.eventListenersSetup = true;
   }
 
   private startInactivityTimer() {
@@ -42,6 +62,9 @@ export class WebsocketConnection {
   }
 
   public send(message: string) {
+    if (!this.websocket) {
+      throw new Error("Cannot send message: WebSocket not initialized");
+    }
     this.websocket.send(message);
     this.lastActivityTime = Date.now();
   }
@@ -86,16 +109,81 @@ export class WebsocketConnection {
     return this.authenticated;
   }
 
-  public close(code?: number, reason?: string) {
-    this.websocket.close(code, reason);
+  public close(code?: number, reason?: string): Promise<void> {
+    if (!this.closePromise) {
+      this.closePromise = new Promise((resolve) => {
+        if (!this.websocket) {
+          resolve();
+          return;
+        }
+
+        // Handle the case where the socket is already closed
+        if (this.websocket.readyState === WebSocket.CLOSED) {
+          resolve();
+          return;
+        }
+
+        // Listen for the close event
+        const onClose = () => {
+          this.websocket?.removeListener('close', onClose);
+          resolve();
+        };
+
+        this.websocket.on('close', onClose);
+        this.websocket.close(code, reason);
+
+        // Safeguard: resolve after 5 seconds even if we don't get a close event
+        setTimeout(() => {
+          this.websocket?.removeListener('close', onClose);
+          resolve();
+        }, 5000);
+      });
+    }
+
+    return this.closePromise;
   }
 
   public ping() {
-    this.websocket.ping();
+    if (this.websocket) {
+      this.websocket.ping();
+    }
+  }
+
+  public isConnected(): boolean {
+    return (
+      this.websocket !== null && this.websocket.readyState === WebSocket.OPEN
+    );
+  }
+
+  setMetadata(key: string, value: any): void {
+    this.metadata.set(key, value);
+  }
+
+  getMetadata(key: string): any {
+    return this.metadata.get(key);
+  }
+
+  async refreshSession(sessionStore: ISessionStore): Promise<boolean> {
+    const sessionId = this.getMetadata("sessionId");
+    if (!sessionId) return false;
+
+    const session = await sessionStore.get(sessionId);
+    if (!session) return false;
+
+    session.lastAccessedAt = new Date();
+    return sessionStore.update(sessionId, session);
   }
 
   // Static method for broadcasting to multiple connections
   public static broadcast(message: string, connections: WebsocketConnection[]) {
-    connections.forEach((connection) => connection.send(message));
+    connections.forEach((connection) => {
+      if (connection.isConnected()) {
+        connection.send(message);
+      }
+    });
+  }
+
+  public getSessionId(): string | undefined {
+    return this.getMetadata("sessionId");
   }
 }

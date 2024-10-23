@@ -1,6 +1,6 @@
 import WebSocket from "ws";
+import { ISessionStore } from "../interfaces";
 export declare class WebsocketConnection {
-    private websocket;
     private handleMessage;
     private handleClose;
     private inactivityTimeout;
@@ -9,8 +9,13 @@ export declare class WebsocketConnection {
     private lastActivityTime;
     private messageCount;
     private authenticated;
-    constructor(websocket: WebSocket, handleMessage: (data: WebSocket.Data, websocket: WebsocketConnection) => void, handleClose: (connectionId: string) => void, inactivityTimeout?: number, // 5 minutes
-    maxMessagesPerMinute?: number);
+    private metadata;
+    private websocket;
+    private eventListenersSetup;
+    private closePromise;
+    constructor(handleMessage: (data: WebSocket.Data, websocket: WebsocketConnection) => void, handleClose: (connectionId: string) => void, inactivityTimeout?: number, // 5 minutes
+    maxMessagesPerMinute?: number, websocket?: WebSocket);
+    setWebSocket(websocket: WebSocket): void;
     private setupEventListeners;
     private startInactivityTimer;
     private handlePong;
@@ -21,7 +26,12 @@ export declare class WebsocketConnection {
     getConnectionId(): string;
     setAuthenticated(value: boolean): void;
     isAuthenticated(): boolean;
-    close(code?: number, reason?: string): void;
+    close(code?: number, reason?: string): Promise<void>;
     ping(): void;
+    isConnected(): boolean;
+    setMetadata(key: string, value: any): void;
+    getMetadata(key: string): any;
+    refreshSession(sessionStore: ISessionStore): Promise<boolean>;
     static broadcast(message: string, connections: WebsocketConnection[]): void;
+    getSessionId(): string | undefined;
 }

@@ -13,3 +13,5 @@ export * from "./IPublishingStrategy";
 export * from "./ITextToAudioStrategy";
 export * from "./IPubSubClient";
 export * from "./IStorageStrategy";
+export * from "./auth";
+export * from "./InMemoryUser";

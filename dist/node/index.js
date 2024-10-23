@@ -22,7 +22,8 @@ __reExport(src_exports, require("./core"), module.exports);
 __reExport(src_exports, require("./interfaces"), module.exports);
 __reExport(src_exports, require("./logging"), module.exports);
 __reExport(src_exports, require("./services"), module.exports);
-__reExport(src_exports, require("./examples/backend"), module.exports);
+__reExport(src_exports, require("./minimal"), module.exports);
+__reExport(src_exports, require("./utils"), module.exports);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ...require("./MicroserviceFramework"),
@@ -32,6 +33,7 @@ __reExport(src_exports, require("./examples/backend"), module.exports);
   ...require("./interfaces"),
   ...require("./logging"),
   ...require("./services"),
-  ...require("./examples/backend")
+  ...require("./minimal"),
+  ...require("./utils")
 });
 //# sourceMappingURL=index.js.map

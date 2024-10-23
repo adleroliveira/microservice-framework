@@ -4,7 +4,12 @@ import zlib from "zlib";
 import path from "path";
 import fs from "fs/promises";
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
-import { IBackEnd, IRequest } from "../interfaces";
+import {
+  IBackEnd,
+  IRequest,
+  ISessionStore,
+  IAuthenticationProvider,
+} from "../interfaces";
 
 export type HttpRequest = {
   method: string;
@@ -26,6 +31,8 @@ export interface WebServerConfig extends IServerConfig {
   timeout?: number;
   corsOrigin?: string;
   staticDir?: string;
+  authProvider?: IAuthenticationProvider;
+  sessionStore?: ISessionStore;
 }
 
 export class WebServer extends MicroserviceFramework<
