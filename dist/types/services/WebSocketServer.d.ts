@@ -1,3 +1,4 @@
+import { ISessionData } from "../interfaces";
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
 import { IBackEnd, IRequest, IResponse, ISessionStore, IAuthenticationProvider } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
@@ -32,6 +33,7 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     constructor(backend: IBackEnd, config: WebSocketServerConfig);
     private setupWebSocketServer;
     private upgradeConnection;
+    private refreshSession;
     private handleMessage;
     private handleClose;
     protected startDependencies(): Promise<void>;
@@ -41,4 +43,5 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     protected rawMessageHandler(message: string): Promise<string>;
     broadcast(message: IRequest<WebSocketMessage>): void;
     sendToConnection(connectionId: string, message: IResponse<WebSocketMessage>): void;
+    getSessionById(sessionId: string): Promise<ISessionData | null>;
 }

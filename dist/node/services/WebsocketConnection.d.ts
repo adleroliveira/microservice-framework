@@ -33,4 +33,5 @@ export declare class WebsocketConnection {
     getMetadata(key: string): any;
     refreshSession(sessionStore: ISessionStore): Promise<boolean>;
     static broadcast(message: string, connections: WebsocketConnection[]): void;
+    getSessionId(): string | undefined;
 }
