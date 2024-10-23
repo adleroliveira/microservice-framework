@@ -1,5 +1,5 @@
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
-import { IBackEnd, IRequest } from "../interfaces";
+import { IBackEnd, IRequest, ISessionStore, IAuthenticationProvider } from "../interfaces";
 export type HttpRequest = {
     method: string;
     path: string;
@@ -18,6 +18,8 @@ export interface WebServerConfig extends IServerConfig {
     timeout?: number;
     corsOrigin?: string;
     staticDir?: string;
+    authProvider?: IAuthenticationProvider;
+    sessionStore?: ISessionStore;
 }
 export declare class WebServer extends MicroserviceFramework<HttpRequest, HttpResponse> {
     private server;

@@ -1,15 +1,16 @@
 import { ServerRunner } from "../ServerRunner";
-import { PingService } from "./microservices/PingService";
-import { PongService } from "./microservices/PongService";
 import { ExampleWebServer } from "./microservices/ExampleWebServer";
 import { ExampleWebSocketServer } from "./microservices/ExampleWebSocketServer";
-import { Backend } from "./backend/Backend";
+import { Backend } from "../minimal/Backend";
 import { ConsoleStrategy } from "../logging";
 import path from "path";
+import { InMemoryAuthProvider, InMemorySessionStore } from "../minimal";
 
 const namespace = "example";
 const logStrategy = new ConsoleStrategy();
 const backend = new Backend();
+const authProvider = new InMemoryAuthProvider();
+const sessionStore = new InMemorySessionStore();
 
 const exampleWebServer = new ExampleWebServer(backend, {
   namespace,
@@ -25,9 +26,16 @@ const exampleWebSocketServer = new ExampleWebSocketServer(backend, {
   serviceId: "websocket",
   path: "/ws",
   port: 8083,
+  requiresAuthentication: true,
+  authProvider,
+  sessionStore,
 });
 
 const server = new ServerRunner();
 server.registerService(exampleWebServer);
 server.registerService(exampleWebSocketServer);
-server.start();
+
+authProvider.addUser("root", "password").then(() => {
+  console.log("Root user created");
+  server.start();
+});

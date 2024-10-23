@@ -42,6 +42,13 @@
 
       const commManager = new MicroserviceFramework.CommunicationsManager({
         url: "ws://localhost:8083/ws",
+        auth: {
+          method: "auth",
+          credentials: {
+            username: "root",
+            password: "password",
+          },
+        },
       });
 
       commManager.onOpen(function () {
@@ -56,13 +63,18 @@
         addMessage(`Error: ${error.message}`);
       });
 
+      commManager.on("authError", (error) => {
+        addMessage(`Error: ${error.message}`);
+      });
+
       sendButton.onclick = function () {
         const message = messageInput.value;
         if (message) {
           addMessage(`Sent: ${message}`);
           messageInput.value = "";
           commManager.request("/echo", message).then((response) => {
-            addMessage(`Received: ${response.data}`);
+            console.log(response.data);
+            addMessage(`Received: ${response.data.body}`);
           });
         }
       };

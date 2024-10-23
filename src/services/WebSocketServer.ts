@@ -1,13 +1,22 @@
 import { Server, Data } from "ws";
-import { createServer, Server as HttpServer } from "http";
+import { createServer, Server as HttpServer, IncomingMessage } from "http";
+import { Duplex } from "stream";
+
 import {
   MicroserviceFramework,
   IServerConfig,
   StatusUpdate,
   RequestHandler,
 } from "../MicroserviceFramework";
-import { IBackEnd, IRequest, IResponse } from "../interfaces";
+import {
+  IBackEnd,
+  IRequest,
+  IResponse,
+  ISessionStore,
+  IAuthenticationProvider,
+} from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
+import { WebSocketAuthenticationMiddleware } from "./WebSocketAuthenticationMiddleware";
 
 type PayloadType = "object" | "string" | "IRequest" | "IResponse";
 
@@ -20,6 +29,10 @@ export interface WebSocketServerConfig extends IServerConfig {
   port: number;
   path?: string;
   maxConnections?: number;
+  requiresAuthentication?: boolean;
+  authProvider?: IAuthenticationProvider;
+  sessionStore?: ISessionStore;
+  authenticationMiddleware?: WebSocketAuthenticationMiddleware;
 }
 
 export type WebSocketMessage = {
@@ -40,6 +53,12 @@ export class WebSocketServer extends MicroserviceFramework<
   private port: number;
   private path: string;
   private maxConnections: number;
+  private authProvider: IAuthenticationProvider | undefined;
+  private sessionStore: ISessionStore | undefined;
+  private authenticationMiddleware:
+    | WebSocketAuthenticationMiddleware
+    | undefined;
+  private requiresAuthentication: boolean = false;
 
   constructor(backend: IBackEnd, config: WebSocketServerConfig) {
     super(backend, config);
@@ -49,32 +68,110 @@ export class WebSocketServer extends MicroserviceFramework<
 
     this.server = createServer();
     this.wss = new Server({ noServer: true });
-
+    this.authProvider = config.authProvider;
+    this.sessionStore = config.sessionStore;
+    this.requiresAuthentication = config.requiresAuthentication || false;
+    if (this.requiresAuthentication === true) {
+      if (!this.authProvider || !this.sessionStore) {
+        throw new Error(
+          "Authentication is required but no authentication middleware or session store was provided"
+        );
+      }
+      const authMiddleware =
+        config.authenticationMiddleware ||
+        new WebSocketAuthenticationMiddleware(
+          this.authProvider,
+          this.sessionStore
+        );
+      this.authenticationMiddleware = authMiddleware;
+    }
     this.setupWebSocketServer();
   }
 
   private setupWebSocketServer() {
-    this.server.on("upgrade", (request, socket, head) => {
-      if (request.url === this.path) {
-        this.wss.handleUpgrade(request, socket, head, (ws) => {
-          if (this.connections.size >= this.maxConnections) {
-            ws.close(1013, "Maximum number of connections reached");
+    this.server.on(
+      "upgrade",
+      async (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+        // Prevent memory leaks by handling socket errors
+        socket.on("error", (err) => {
+          this.error("Socket error:", err);
+          socket.destroy();
+        });
+
+        if (request.url !== this.path) {
+          socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        // Handle authentication before upgrading the connection
+        if (this.requiresAuthentication) {
+          try {
+            // Create a temporary connection object for authentication
+            const tempConnection = new WebsocketConnection(
+              this.handleMessage.bind(this),
+              this.handleClose.bind(this)
+            );
+
+            await this.authenticationMiddleware!.authenticateConnection(
+              request,
+              tempConnection
+            );
+
+            // If authentication succeeds, proceed with the upgrade
+            this.upgradeConnection(request, socket, head, tempConnection);
+          } catch (error: any) {
+            this.warn("Authentication error", error);
+            socket.write(
+              "HTTP/1.1 401 Unauthorized\r\n" +
+                "Connection: close\r\n" +
+                "Content-Length: 21\r\n" +
+                "Content-Type: text/plain\r\n" +
+                "\r\n" +
+                "Authentication failed\r\n"
+            );
+
+            // End the socket after writing the response
+            socket.end();
             return;
           }
+        } else {
+          // If no authentication required, proceed with upgrade directly
+          this.upgradeConnection(request, socket, head);
+        }
+      }
+    );
+  }
 
-          const connection = new WebsocketConnection(
-            ws,
-            this.handleMessage.bind(this),
-            this.handleClose.bind(this)
-          );
+  private upgradeConnection(
+    request: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+    authenticatedConnection?: WebsocketConnection
+  ) {
+    this.wss.handleUpgrade(request, socket, head, (ws) => {
+      if (this.connections.size >= this.maxConnections) {
+        ws.close(1013, "Maximum number of connections reached");
+        return;
+      }
 
-          this.connections.set(connection.getConnectionId(), connection);
-          this.info(
-            `New WebSocket connection: ${connection.getConnectionId()}`
-          );
-        });
+      if (authenticatedConnection) {
+        // Set the WebSocket instance on the existing connection
+        authenticatedConnection.setWebSocket(ws);
+        this.connections.set(
+          authenticatedConnection.getConnectionId(),
+          authenticatedConnection
+        );
       } else {
-        socket.destroy();
+        // Create new connection with WebSocket instance
+        const connection = new WebsocketConnection(
+          this.handleMessage.bind(this),
+          this.handleClose.bind(this),
+          undefined, // default timeout
+          undefined, // default rate limit
+          ws
+        );
+        this.connections.set(connection.getConnectionId(), connection);
       }
     });
   }

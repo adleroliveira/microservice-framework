@@ -407,26 +407,68 @@ var WebSocketState = /* @__PURE__ */ ((WebSocketState3) => {
   WebSocketState3[WebSocketState3["CLOSED"] = 3] = "CLOSED";
   return WebSocketState3;
 })(WebSocketState || {});
+var AuthMethod = /* @__PURE__ */ ((AuthMethod3) => {
+  AuthMethod3["TOKEN"] = "token";
+  AuthMethod3["CREDENTIALS"] = "auth";
+  return AuthMethod3;
+})(AuthMethod || {});
 var WebSocketManager = class extends eventemitter3_default {
-  constructor(url, secure = false, maxReconnectAttempts = 5, reconnectInterval = 5e3, connectionTimeout = 1e4) {
+  constructor(config) {
     super();
     this.reconnectAttempts = 0;
     this.state = 3 /* CLOSED */;
+    this.protocols = [];
     this.logger = new BrowserConsoleStrategy();
-    this.url = url;
-    this.secure = secure;
-    this.maxReconnectAttempts = maxReconnectAttempts;
-    this.reconnectInterval = reconnectInterval;
-    this.connectionTimeout = connectionTimeout;
+    this.url = config.url;
+    this.secure = config.secure || false;
+    this.auth = config.auth;
+    this.maxReconnectAttempts = config.maxReconnectAttempts || 5;
+    this.reconnectInterval = config.reconnectInterval || 5e3;
+    this.connectionTimeout = config.connectionTimeout || 1e4;
+    this.setupAuthProtocols();
     this.connect();
+  }
+  setupAuthProtocols() {
+    if (!this.auth) return;
+    switch (this.auth.method) {
+      case "token" /* TOKEN */:
+        if (this.auth.token) {
+          this.protocols.push(`token.${this.auth.token}`);
+        }
+        break;
+      case "auth" /* CREDENTIALS */:
+        if (this.auth.credentials) {
+          const { username, password } = this.auth.credentials;
+          const credentials = btoa(encodeURIComponent(password)).replace(
+            /=/g,
+            ""
+          );
+          this.protocols.push(`auth-${username}-${credentials}`);
+          this.logger.debug(`Auth protocol`, this.protocols);
+        }
+        break;
+    }
   }
   connect() {
     this.state = 0 /* CONNECTING */;
     const secureUrl = this.getSecureUrl(this.url, this.secure);
-    this.logger.info(`Attempting to connect to ${secureUrl}`);
-    this.ws = new WebSocket(secureUrl);
-    this.setHooks();
-    this.setConnectionTimeout();
+    const urlWithAuth = this.auth?.method === "token" /* TOKEN */ && this.auth.token ? `${secureUrl}?token=${this.auth.token}` : secureUrl;
+    this.logger.info(`Attempting to connect to ${urlWithAuth}`);
+    try {
+      this.ws = new WebSocket(urlWithAuth, this.protocols);
+      this.setHooks();
+      this.setConnectionTimeout();
+    } catch (error) {
+      this.handleConnectionError(error);
+    }
+  }
+  handleConnectionError(error) {
+    this.logger.error("Connection error:", error);
+    this.emit("error", {
+      type: "CONNECTION_ERROR",
+      message: "Failed to establish WebSocket connection",
+      error
+    });
   }
   getSecureUrl(url, secure) {
     return secure ? url.replace(/^ws:/, "wss:") : url;
@@ -439,23 +481,67 @@ var WebSocketManager = class extends eventemitter3_default {
       this.logger.info(`WebSocket opened. ReadyState: ${this.ws.readyState}`);
       this.emit("open");
     };
+    this.ws.onerror = (error) => {
+      const wsError = error.target;
+      if (wsError.readyState === WebSocket.CLOSED) {
+        const errorDetails = {
+          type: "CONNECTION_ERROR",
+          message: "Connection failed",
+          readyState: wsError.readyState,
+          url: wsError.url
+        };
+        if (this.reconnectAttempts === 0) {
+          errorDetails.type = "AUTH_ERROR";
+          errorDetails.message = "Authentication required";
+        }
+        this.logger.error("WebSocket error:", errorDetails);
+        this.emit("error", errorDetails);
+      } else {
+        this.logger.error("WebSocket error:", error);
+        this.emit("error", error);
+      }
+    };
     this.ws.onclose = (event) => {
       this.clearConnectionTimeout();
       this.state = 3 /* CLOSED */;
+      if (event.code === 1001 || // Going Away
+      event.code === 1006 || // Abnormal Closure (what browsers often use for 401)
+      event.code === 1008) {
+        const error = {
+          type: "AUTH_ERROR",
+          code: event.code,
+          reason: event.reason || "Authentication required"
+        };
+        this.emit("error", error);
+        return;
+      }
       this.logger.info(
         `WebSocket closed. ReadyState: ${this.ws.readyState}. Code: ${event.code}, Reason: ${event.reason}`
       );
       this.emit("close", event);
       this.handleReconnection();
     };
-    this.ws.onerror = (error) => {
-      this.logger.error(error);
-      this.emit("error", error);
-    };
     this.ws.onmessage = (event) => {
       const parsedData = this.parseMessage(event.data);
       this.emit("message", parsedData);
     };
+  }
+  async checkAuthRequirement() {
+    try {
+      const response = await fetch(this.url.replace(/^ws/, "http"));
+      if (response.status === 401) {
+        const error = {
+          type: "AUTH_ERROR",
+          message: "Authentication required",
+          status: response.status
+        };
+        this.emit("error", error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      return true;
+    }
   }
   handleReconnection() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -520,6 +606,17 @@ var WebSocketManager = class extends eventemitter3_default {
   }
   getReadyState() {
     return this.ws.readyState;
+  }
+  setAuthConfig(authConfig) {
+    this.auth = authConfig;
+    this.setupAuthProtocols();
+  }
+  isAuthenticated() {
+    return this.state === 1 /* OPEN */;
+  }
+  reconnectWithNewAuth(authConfig) {
+    this.setAuthConfig(authConfig);
+    this.reconnect();
   }
 };
 
@@ -627,12 +724,13 @@ var CommunicationsManager = class extends eventemitter3_default {
     this.logger = new BrowserConsoleStrategy();
     this.validateConfig(config);
     try {
-      this.webSocketManager = new WebSocketManager(
-        config.url,
-        config.secure,
-        config.maxReconnectAttempts,
-        config.reconnectInterval
-      );
+      this.webSocketManager = new WebSocketManager({
+        url: config.url,
+        secure: config.secure,
+        auth: config.auth,
+        maxReconnectAttempts: config.maxReconnectAttempts,
+        reconnectInterval: config.reconnectInterval
+      });
       this.requestManager = new RequestManager({
         webSocketManager: this.webSocketManager,
         requestTimeout: config.requestTimeout
@@ -648,6 +746,10 @@ var CommunicationsManager = class extends eventemitter3_default {
       "maxReconnectAttemptsReached",
       this.handleMaxReconnectAttemptsReached.bind(this)
     );
+    this.webSocketManager.on("authError", (error) => {
+      this.logger.error("Authentication error", error);
+      this.emit("authError", error);
+    });
   }
   onOpen(callback) {
     this.logger.info("onOpen callback registered");
@@ -689,8 +791,15 @@ var CommunicationsManager = class extends eventemitter3_default {
   getConnectionState() {
     return this.webSocketManager.getState();
   }
+  updateAuthentication(auth) {
+    this.webSocketManager.reconnectWithNewAuth(auth);
+  }
+  isAuthenticated() {
+    return this.webSocketManager.isAuthenticated();
+  }
 };
 export {
+  AuthMethod,
   BrowserConsoleStrategy,
   CommunicationsManager,
   WebSocketManager,

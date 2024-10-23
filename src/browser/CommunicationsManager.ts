@@ -1,5 +1,10 @@
 import EventEmitter from "eventemitter3";
-import { WebSocketManager, WebSocketState } from "./WebSocketManager";
+import {
+  WebSocketManager,
+  WebSocketState,
+  AuthMethod,
+  IWebSocketAuthConfig,
+} from "./WebSocketManager";
 import { BrowserConsoleStrategy } from "./BrowserConsoleStrategy";
 import { RequestManager } from "./RequestManager";
 import { IResponseData } from "../interfaces";
@@ -7,7 +12,14 @@ import { IResponseData } from "../interfaces";
 export interface ICommunicationsManagerConfig {
   url: string;
   secure?: boolean;
-  authToken?: string;
+  auth?: {
+    method: AuthMethod;
+    token?: string;
+    credentials?: {
+      username: string;
+      password: string;
+    };
+  };
   maxReconnectAttempts?: number;
   reconnectInterval?: number;
   heartbeatInterval?: number;
@@ -24,12 +36,13 @@ export class CommunicationsManager extends EventEmitter {
     this.validateConfig(config);
 
     try {
-      this.webSocketManager = new WebSocketManager(
-        config.url,
-        config.secure,
-        config.maxReconnectAttempts,
-        config.reconnectInterval
-      );
+      this.webSocketManager = new WebSocketManager({
+        url: config.url,
+        secure: config.secure,
+        auth: config.auth,
+        maxReconnectAttempts: config.maxReconnectAttempts,
+        reconnectInterval: config.reconnectInterval,
+      });
 
       this.requestManager = new RequestManager({
         webSocketManager: this.webSocketManager,
@@ -48,6 +61,11 @@ export class CommunicationsManager extends EventEmitter {
       "maxReconnectAttemptsReached",
       this.handleMaxReconnectAttemptsReached.bind(this)
     );
+
+    this.webSocketManager.on("authError", (error) => {
+      this.logger.error("Authentication error", error);
+      this.emit("authError", error);
+    });
   }
 
   public onOpen(callback: () => void) {
@@ -104,5 +122,13 @@ export class CommunicationsManager extends EventEmitter {
 
   public getConnectionState(): WebSocketState {
     return this.webSocketManager.getState();
+  }
+
+  public updateAuthentication(auth: IWebSocketAuthConfig) {
+    this.webSocketManager.reconnectWithNewAuth(auth);
+  }
+
+  public isAuthenticated(): boolean {
+    return this.webSocketManager.isAuthenticated();
   }
 }
