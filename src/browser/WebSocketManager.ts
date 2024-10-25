@@ -10,7 +10,8 @@ export enum WebSocketState {
 
 export enum AuthMethod {
   TOKEN = "token",
-  CREDENTIALS = "auth",
+  CREDENTIALS = "credentials",
+  ANONYMOUS = "anonymous",
 }
 
 export interface IWebSocketAuthConfig {
@@ -182,27 +183,6 @@ export class WebSocketManager extends EventEmitter {
     };
   }
 
-  private async checkAuthRequirement() {
-    try {
-      // Make a regular HTTP request to check auth requirements
-      const response = await fetch(this.url.replace(/^ws/, "http"));
-
-      if (response.status === 401) {
-        const error = {
-          type: "AUTH_ERROR",
-          message: "Authentication required",
-          status: response.status,
-        };
-        this.emit("error", error);
-        return false;
-      }
-      return true;
-    } catch (error) {
-      // Network error or other issues - proceed with WebSocket connection
-      return true;
-    }
-  }
-
   private handleReconnection() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
@@ -289,5 +269,34 @@ export class WebSocketManager extends EventEmitter {
   public reconnectWithNewAuth(authConfig: IWebSocketAuthConfig) {
     this.setAuthConfig(authConfig);
     this.reconnect();
+  }
+
+  public destroy(): void {
+    // Clear the connection timeout if it exists
+    this.clearConnectionTimeout();
+
+    // Close WebSocket connection if it exists
+    if (this.ws) {
+      // Remove all WebSocket event listeners
+      this.ws.onopen = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.onmessage = null;
+
+      // Close the connection if it's not already closed
+      if (this.state !== WebSocketState.CLOSED) {
+        this.close();
+      }
+
+      this.ws = null!;
+    }
+
+    // Clear all event listeners
+    this.removeAllListeners();
+
+    // Clear references
+    this.logger = null!;
+    this.auth = undefined;
+    this.protocols = [];
   }
 }

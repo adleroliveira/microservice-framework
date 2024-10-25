@@ -126,4 +126,36 @@ export class RequestManager extends EventEmitter {
   public clearAuthToken() {
     this.authToken = undefined;
   }
+
+  public clearState(): void {
+    // Clear pending requests but keep the manager alive
+    for (const [requestId] of this.pendingRequests) {
+      this.pendingRequests.delete(requestId);
+    }
+    this.clearAuthToken();
+  }
+
+  public destroy(): void {
+    // Clear timeout for any pending requests
+    for (const [requestId] of this.pendingRequests) {
+      this.pendingRequests.delete(requestId);
+    }
+
+    // Remove WebSocket message listener
+    this.webSocketManager.removeListener(
+      "message",
+      this.handleMessage.bind(this)
+    );
+
+    // Clear all event listeners
+    this.removeAllListeners();
+
+    // Clear auth token
+    this.clearAuthToken();
+
+    // Clear references
+    this.webSocketManager = null!;
+    this.logger = null!;
+    this.pendingRequests = null!;
+  }
 }

@@ -30,29 +30,54 @@ export class CommunicationsManager extends EventEmitter {
   private webSocketManager: WebSocketManager;
   private requestManager: RequestManager;
   private logger = new BrowserConsoleStrategy();
+  private config: ICommunicationsManagerConfig;
 
   constructor(config: ICommunicationsManagerConfig) {
     super();
+    this.config = config;
     this.validateConfig(config);
 
     try {
-      this.webSocketManager = new WebSocketManager({
-        url: config.url,
-        secure: config.secure,
-        auth: config.auth,
-        maxReconnectAttempts: config.maxReconnectAttempts,
-        reconnectInterval: config.reconnectInterval,
-      });
-
-      this.requestManager = new RequestManager({
-        webSocketManager: this.webSocketManager,
-        requestTimeout: config.requestTimeout,
-      });
-
-      this.setupWebSocketHooks();
+      this.initializeManagers(config);
     } catch (error) {
       this.logger.error("Error initializing CommunicationsManager", { error });
       throw new Error("Failed to initialize CommunicationsManager");
+    }
+  }
+
+  private initializeManagers(config: ICommunicationsManagerConfig) {
+    this.webSocketManager = new WebSocketManager({
+      url: config.url,
+      secure: config.secure,
+      auth: config.auth,
+      maxReconnectAttempts: config.maxReconnectAttempts,
+      reconnectInterval: config.reconnectInterval,
+    });
+
+    this.requestManager = new RequestManager({
+      webSocketManager: this.webSocketManager,
+      requestTimeout: config.requestTimeout,
+    });
+
+    this.setupWebSocketHooks();
+  }
+
+  private async cleanupCurrentState(): Promise<void> {
+    // Remove event listeners but keep the manager instances
+    this.webSocketManager.removeAllListeners();
+    this.requestManager.removeAllListeners();
+
+    // Close current WebSocket connection
+    if (this.webSocketManager) {
+      await new Promise<void>((resolve) => {
+        this.webSocketManager.once("close", () => resolve());
+        this.webSocketManager.close();
+      });
+    }
+
+    // Clear request manager state
+    if (this.requestManager) {
+      this.requestManager.clearState();
     }
   }
 
@@ -66,6 +91,51 @@ export class CommunicationsManager extends EventEmitter {
       this.logger.error("Authentication error", error);
       this.emit("authError", error);
     });
+  }
+
+  public async authenticate(authConfig: IWebSocketAuthConfig): Promise<void> {
+    try {
+      await this.cleanupCurrentState();
+
+      // Create new config with authentication
+      const newConfig = {
+        ...this.config,
+        auth: authConfig,
+      };
+
+      // Reinitialize with authenticated config
+      this.initializeManagers(newConfig);
+
+      this.logger.info("Switched to authenticated mode");
+      this.emit("modeChanged", "authenticated");
+    } catch (error) {
+      this.logger.error("Error switching to authenticated mode", error);
+      throw error;
+    }
+  }
+
+  public async switchToAnonymous(): Promise<void> {
+    try {
+      // Clear current state but don't destroy everything
+      await this.cleanupCurrentState();
+
+      // Create new config for anonymous connection
+      const anonymousConfig = {
+        ...this.config,
+        auth: {
+          method: AuthMethod.ANONYMOUS,
+        },
+      };
+
+      // Reinitialize with anonymous config
+      this.initializeManagers(anonymousConfig);
+
+      this.logger.info("Switched to anonymous mode");
+      this.emit("modeChanged", "anonymous");
+    } catch (error) {
+      this.logger.error("Error switching to anonymous mode", error);
+      throw error;
+    }
   }
 
   public onOpen(callback: () => void) {
@@ -130,5 +200,28 @@ export class CommunicationsManager extends EventEmitter {
 
   public isAuthenticated(): boolean {
     return this.webSocketManager.isAuthenticated();
+  }
+
+  public getCurrentMode(): "anonymous" | "authenticated" {
+    return this.config.auth?.method === AuthMethod.ANONYMOUS
+      ? "anonymous"
+      : "authenticated";
+  }
+
+  public destroy(): void {
+    this.removeAllListeners();
+
+    if (this.webSocketManager) {
+      this.webSocketManager.destroy();
+      this.webSocketManager = null!;
+    }
+
+    if (this.requestManager) {
+      this.requestManager.destroy();
+      this.requestManager = null!;
+    }
+
+    this.logger = null!;
+    this.config = null!;
   }
 }

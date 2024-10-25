@@ -77,7 +77,6 @@ export class WebServer extends MicroserviceFramework<
       }
 
       try {
-        this.info(`Trying to serve static file: ${staticFilePath}`);
         const content = await this.serveStaticFile(staticFilePath);
         if (content) {
           this.sendStaticResponse(

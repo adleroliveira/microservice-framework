@@ -26,9 +26,20 @@ const exampleWebSocketServer = new ExampleWebSocketServer(backend, {
   serviceId: "websocket",
   path: "/ws",
   port: 8083,
-  requiresAuthentication: true,
-  authProvider,
-  sessionStore,
+  authentication: {
+    required: false, // Authentication not mandatory
+    allowAnonymous: true, // Allow anonymous connections
+    anonymousConfig: {
+      enabled: true,
+      sessionDuration: 24 * 60 * 60 * 1000, // 24 hours
+      persistentIdentityEnabled: true,
+      metadata: {
+        permissions: ["read"], // Default permissions for anonymous users
+      },
+    },
+    sessionStore,
+    authProvider,
+  },
 });
 
 const server = new ServerRunner();
@@ -40,6 +51,6 @@ const main = async () => {
   await sessionStore.initialize();
   await authProvider.addUser("root", "password");
   server.start();
-}
+};
 
 main();

@@ -3,14 +3,25 @@ import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
 import { IBackEnd, IRequest, IResponse, ISessionStore, IAuthenticationProvider } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
 import { WebSocketAuthenticationMiddleware } from "./WebSocketAuthenticationMiddleware";
+export interface AnonymousSessionConfig {
+    enabled: boolean;
+    sessionDuration?: number;
+    persistentIdentityEnabled?: boolean;
+    metadata?: Record<string, unknown>;
+}
+export interface AuthenticationConfig {
+    required: boolean;
+    allowAnonymous: boolean;
+    anonymousConfig?: AnonymousSessionConfig;
+    authProvider?: IAuthenticationProvider;
+    sessionStore: ISessionStore;
+    authenticationMiddleware?: WebSocketAuthenticationMiddleware;
+}
 export interface WebSocketServerConfig extends IServerConfig {
     port: number;
     path?: string;
     maxConnections?: number;
-    requiresAuthentication?: boolean;
-    authProvider?: IAuthenticationProvider;
-    sessionStore?: ISessionStore;
-    authenticationMiddleware?: WebSocketAuthenticationMiddleware;
+    authentication: AuthenticationConfig;
 }
 export type WebSocketMessage = {
     type: string;
@@ -26,13 +37,15 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     private port;
     private path;
     private maxConnections;
-    private authProvider;
-    private sessionStore;
-    private authenticationMiddleware;
-    private requiresAuthentication;
+    private authConfig;
+    private authenticationMiddleware?;
     constructor(backend: IBackEnd, config: WebSocketServerConfig);
     private setupWebSocketServer;
     private upgradeConnection;
+    private validateAuthenticationConfig;
+    private handleAuthentication;
+    private createAnonymousSession;
+    private extractDeviceId;
     private handleWsEvents;
     private refreshSession;
     private handleMessage;

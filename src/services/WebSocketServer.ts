@@ -1,7 +1,11 @@
 import { Server, Data } from "ws";
 import { createServer, Server as HttpServer, IncomingMessage } from "http";
 import { Duplex } from "stream";
-import { ISessionData } from "../interfaces";
+import {
+  IAuthenticationMetadata,
+  IRequestHeader,
+  ISessionData,
+} from "../interfaces";
 
 import {
   MicroserviceFramework,
@@ -26,14 +30,27 @@ interface DetectionResult<T> {
   payload: T;
 }
 
+export interface AnonymousSessionConfig {
+  enabled: boolean;
+  sessionDuration?: number; // Duration in milliseconds
+  persistentIdentityEnabled?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AuthenticationConfig {
+  required: boolean;
+  allowAnonymous: boolean;
+  anonymousConfig?: AnonymousSessionConfig;
+  authProvider?: IAuthenticationProvider;
+  sessionStore: ISessionStore;
+  authenticationMiddleware?: WebSocketAuthenticationMiddleware;
+}
+
 export interface WebSocketServerConfig extends IServerConfig {
   port: number;
   path?: string;
   maxConnections?: number;
-  requiresAuthentication?: boolean;
-  authProvider?: IAuthenticationProvider;
-  sessionStore?: ISessionStore;
-  authenticationMiddleware?: WebSocketAuthenticationMiddleware;
+  authentication: AuthenticationConfig;
 }
 
 export type WebSocketMessage = {
@@ -54,38 +71,43 @@ export class WebSocketServer extends MicroserviceFramework<
   private port: number;
   private path: string;
   private maxConnections: number;
-  private authProvider: IAuthenticationProvider | undefined;
-  private sessionStore: ISessionStore | undefined;
-  private authenticationMiddleware:
-    | WebSocketAuthenticationMiddleware
-    | undefined;
-  private requiresAuthentication: boolean = false;
+  private authConfig: AuthenticationConfig;
+  private authenticationMiddleware?: WebSocketAuthenticationMiddleware;
 
   constructor(backend: IBackEnd, config: WebSocketServerConfig) {
     super(backend, config);
+
+    this.validateAuthenticationConfig(config.authentication);
+
     this.port = config.port;
     this.path = config.path || "/ws";
     this.maxConnections = config.maxConnections || 1000;
+    this.authConfig = config.authentication;
 
     this.server = createServer();
     this.wss = new Server({ noServer: true });
-    this.authProvider = config.authProvider;
-    this.sessionStore = config.sessionStore;
-    this.requiresAuthentication = config.requiresAuthentication || false;
-    if (this.requiresAuthentication === true) {
-      if (!this.authProvider || !this.sessionStore) {
+
+    if (this.authConfig.required || this.authConfig.allowAnonymous) {
+      if (!this.authConfig.sessionStore) {
         throw new Error(
-          "Authentication is required but no authentication middleware or session store was provided"
+          "Session store is required for both authenticated and anonymous connections"
         );
       }
-      const authMiddleware =
-        config.authenticationMiddleware ||
-        new WebSocketAuthenticationMiddleware(
-          this.authProvider,
-          this.sessionStore
+
+      if (this.authConfig.required && !this.authConfig.authProvider) {
+        throw new Error(
+          "Authentication provider is required when authentication is required"
         );
-      this.authenticationMiddleware = authMiddleware;
+      }
+
+      this.authenticationMiddleware =
+        config.authentication.authenticationMiddleware ||
+        new WebSocketAuthenticationMiddleware(
+          this.authConfig.authProvider!,
+          this.authConfig.sessionStore
+        );
     }
+
     this.setupWebSocketServer();
   }
 
@@ -109,41 +131,19 @@ export class WebSocketServer extends MicroserviceFramework<
           return;
         }
 
-        // Handle authentication before upgrading the connection
-        if (this.requiresAuthentication) {
-          try {
-            // Create a temporary connection object for authentication
-            const tempConnection = new WebsocketConnection(
-              this.handleMessage.bind(this),
-              this.handleClose.bind(this)
-            );
-
-            await this.authenticationMiddleware!.authenticateConnection(
-              request,
-              tempConnection
-            );
-
-            // If authentication succeeds, proceed with the upgrade
-            this.upgradeConnection(request, socket, head, tempConnection);
-          } catch (error: any) {
-            this.warn("Authentication error", error);
-            socket.write(
-              "HTTP/1.1 401 Unauthorized\r\n" +
-                "Connection: close\r\n" +
-                "Content-Length: 21\r\n" +
-                "Content-Type: text/plain\r\n" +
-                "\r\n" +
-                "Authentication failed\r\n"
-            );
-
-            // End the socket after writing the response
-            socket.end();
-            return;
-          }
-        } else {
-          // If no authentication required, proceed with upgrade directly
-          this.upgradeConnection(request, socket, head);
+        const connection = await this.handleAuthentication(request);
+        if (!connection) {
+          socket.write(
+            "HTTP/1.1 401 Unauthorized\r\n" +
+              "Connection: close\r\n" +
+              "Content-Type: text/plain\r\n\r\n" +
+              "Authentication failed\r\n"
+          );
+          socket.end();
+          return;
         }
+
+        this.upgradeConnection(request, socket, head, connection);
       }
     );
   }
@@ -182,6 +182,145 @@ export class WebSocketServer extends MicroserviceFramework<
     });
   }
 
+  private validateAuthenticationConfig(config: AuthenticationConfig): void {
+    // Check for invalid configuration where no connections would be possible
+    if (!config.required && !config.allowAnonymous) {
+      throw new Error(
+        "Invalid authentication configuration: " +
+          "When authentication is not required, you must either enable anonymous connections " +
+          "or set required to true. Current configuration would prevent any connections."
+      );
+    }
+
+    // Additional validation checks
+    if (config.required && !config.authProvider) {
+      throw new Error(
+        "Invalid authentication configuration: " +
+          "Authentication provider is required when authentication is required"
+      );
+    }
+
+    if (config.allowAnonymous && !config.sessionStore) {
+      throw new Error(
+        "Invalid authentication configuration: " +
+          "Session store is required when anonymous connections are allowed"
+      );
+    }
+
+    // Validate anonymous config if anonymous connections are allowed
+    if (config.allowAnonymous && config.anonymousConfig) {
+      if (
+        config.anonymousConfig.sessionDuration !== undefined &&
+        config.anonymousConfig.sessionDuration <= 0
+      ) {
+        throw new Error(
+          "Invalid anonymous session configuration: " +
+            "Session duration must be positive"
+        );
+      }
+    }
+  }
+
+  private async handleAuthentication(
+    request: IncomingMessage
+  ): Promise<WebsocketConnection | null> {
+    try {
+      // First, try to authenticate if credentials are provided
+      const connection = new WebsocketConnection(
+        this.handleMessage.bind(this),
+        this.handleClose.bind(this)
+      );
+
+      // Try token/credentials authentication first if middleware exists
+      if (this.authenticationMiddleware) {
+        try {
+          const authResult =
+            await this.authenticationMiddleware.authenticateConnection(
+              request,
+              connection
+            );
+          if (authResult.success) {
+            for (const [key, value] of Object.entries(authResult)) {
+              if (value) connection.setMetadata(key, value);
+            }
+            return connection;
+          }
+        } catch (error) {
+          // Authentication failed, but we might still allow anonymous access
+          if (this.authConfig.required) {
+            throw error;
+          }
+        }
+      }
+
+      // If we reach here and anonymous access is allowed, create anonymous session
+      if (this.authConfig.allowAnonymous) {
+        await this.createAnonymousSession(connection, request);
+        return connection;
+      }
+
+      // If we reach here, neither authentication succeeded nor anonymous access is allowed
+      return null;
+    } catch (error: any) {
+      this.error("Authentication error:", error);
+      return null;
+    }
+  }
+
+  private async createAnonymousSession(
+    connection: WebsocketConnection,
+    request: IncomingMessage
+  ): Promise<void> {
+    const config = this.authConfig.anonymousConfig || {
+      enabled: true,
+      sessionDuration: 24 * 60 * 60 * 1000, // 24 hours default
+    };
+
+    const deviceId = this.extractDeviceId(request);
+
+    const sessionData: ISessionData = {
+      sessionId: crypto.randomUUID(),
+      userId: deviceId || crypto.randomUUID(), // Use device ID as userId if available
+      createdAt: new Date(),
+      expiresAt: new Date(
+        Date.now() + (config.sessionDuration || 24 * 60 * 60 * 1000)
+      ),
+      lastAccessedAt: new Date(),
+      metadata: {
+        ...config.metadata,
+        isAnonymous: true,
+        deviceId,
+      },
+    };
+
+    await this.authConfig.sessionStore.create(sessionData);
+    connection.setMetadata("sessionId", sessionData.sessionId);
+    connection.setMetadata("userId", sessionData.userId);
+    connection.setMetadata("isAnonymous", true);
+    connection.setAuthenticated(false);
+  }
+
+  private extractDeviceId(request: IncomingMessage): string | null {
+    // Try to extract device ID from various sources
+    const url = new URL(request.url!, `http://${request.headers.host}`);
+
+    // Check query parameters
+    const deviceId = url.searchParams.get("deviceId");
+    if (deviceId) return deviceId;
+
+    // Check headers
+    const deviceIdHeader = request.headers["x-device-id"];
+    if (deviceIdHeader) return deviceIdHeader.toString();
+
+    // Check cookies
+    const cookies = request.headers.cookie
+      ?.split(";")
+      .map((cookie) => cookie.trim().split("="))
+      .find(([key]) => key === "deviceId");
+
+    return cookies ? cookies[1] : null;
+  }
+
   private handleWsEvents() {
     return {
       onRateLimit: (connectionId: string) => {
@@ -210,9 +349,7 @@ export class WebSocketServer extends MicroserviceFramework<
   }
 
   private async refreshSession(connection: WebsocketConnection): Promise<void> {
-    if (this.requiresAuthentication) {
-      await connection.refreshSession(this.sessionStore!);
-    }
+    await connection.refreshSession(this.authConfig.sessionStore);
   }
 
   private async handleMessage(
@@ -254,18 +391,24 @@ export class WebSocketServer extends MicroserviceFramework<
         const request = detectionResult.payload as IRequest<any>;
         // TODO: handle non-authenticated Requests
         // TODO: handle authorization
+
+        let authMetadata: IAuthenticationMetadata = {};
+        authMetadata.isAuthenticated = connection.isAuthenticated();
+        if (connection.isAuthenticated()) {
+          authMetadata.sessionId = connection.getSessionId();
+          authMetadata.userId = connection.getMetadata("userId");
+          authMetadata.connectionId = connection.getConnectionId();
+        }
+
         const response = await this.makeRequest<any>({
           to: request.header.recipientAddress || this.serviceId,
           requestType: request.header.requestType || "unknown",
-          body: {
-            connectionId: connection.getConnectionId(),
-            type: request.header.requestType || "unknown",
-            body: request.body,
-          },
+          body: request.body,
           headers: {
             ...request.header,
             requestId: request.header.requestId,
             sessionId: connection.getSessionId(),
+            authMetadata,
           },
           handleStatusUpdate: async (
             updateRequest: IRequest<any>,
@@ -373,7 +516,7 @@ export class WebSocketServer extends MicroserviceFramework<
   }
 
   async getSessionById(sessionId: string): Promise<ISessionData | null> {
-    return this.sessionStore ? this.sessionStore.get(sessionId) : null;
+    return this.authConfig.sessionStore.get(sessionId);
   }
 }
 

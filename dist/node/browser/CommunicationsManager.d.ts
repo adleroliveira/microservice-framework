@@ -21,8 +21,13 @@ export declare class CommunicationsManager extends EventEmitter {
     private webSocketManager;
     private requestManager;
     private logger;
+    private config;
     constructor(config: ICommunicationsManagerConfig);
+    private initializeManagers;
+    private cleanupCurrentState;
     private setupWebSocketHooks;
+    authenticate(authConfig: IWebSocketAuthConfig): Promise<void>;
+    switchToAnonymous(): Promise<void>;
     onOpen(callback: () => void): void;
     onClose(callback: (event: CloseEvent) => void): void;
     onError(callback: (error: Event) => void): void;
@@ -34,4 +39,6 @@ export declare class CommunicationsManager extends EventEmitter {
     getConnectionState(): WebSocketState;
     updateAuthentication(auth: IWebSocketAuthConfig): void;
     isAuthenticated(): boolean;
+    getCurrentMode(): "anonymous" | "authenticated";
+    destroy(): void;
 }

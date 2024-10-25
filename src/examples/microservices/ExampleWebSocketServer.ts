@@ -12,6 +12,7 @@ export class ExampleWebSocketServer extends WebSocketServer {
 
   @RequestHandler<IRequest<string>>("/echo")
   public async exampleHandler(request: IRequest<string>): Promise<string> {
+    this.info("Request", request);
     return request.body;
   }
 }

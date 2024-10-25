@@ -666,11 +666,14 @@ config = {
       }
 
       let header: IRequestHeader = {
-        timestamp: Date.now(),
-        requestId,
-        requesterAddress: headers?.requesterAddress || this.address,
-        recipientAddress: replyTo || this.address,
-        requestType,
+        ...{
+          timestamp: Date.now(),
+          requestId,
+          requesterAddress: this.address,
+          recipientAddress: replyTo || this.address,
+          requestType,
+        },
+        ...headers,
       };
 
       header = this.enrichRequest(header, body);

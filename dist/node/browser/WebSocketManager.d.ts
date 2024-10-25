@@ -7,7 +7,8 @@ export declare enum WebSocketState {
 }
 export declare enum AuthMethod {
     TOKEN = "token",
-    CREDENTIALS = "auth"
+    CREDENTIALS = "credentials",
+    ANONYMOUS = "anonymous"
 }
 export interface IWebSocketAuthConfig {
     method: AuthMethod;
@@ -44,7 +45,6 @@ export declare class WebSocketManager extends EventEmitter {
     private handleConnectionError;
     private getSecureUrl;
     private setHooks;
-    private checkAuthRequirement;
     private handleReconnection;
     private setConnectionTimeout;
     private clearConnectionTimeout;
@@ -57,4 +57,5 @@ export declare class WebSocketManager extends EventEmitter {
     setAuthConfig(authConfig: IWebSocketAuthConfig): void;
     isAuthenticated(): boolean;
     reconnectWithNewAuth(authConfig: IWebSocketAuthConfig): void;
+    destroy(): void;
 }

@@ -407,10 +407,11 @@ var WebSocketState = /* @__PURE__ */ ((WebSocketState3) => {
   WebSocketState3[WebSocketState3["CLOSED"] = 3] = "CLOSED";
   return WebSocketState3;
 })(WebSocketState || {});
-var AuthMethod = /* @__PURE__ */ ((AuthMethod3) => {
-  AuthMethod3["TOKEN"] = "token";
-  AuthMethod3["CREDENTIALS"] = "auth";
-  return AuthMethod3;
+var AuthMethod = /* @__PURE__ */ ((AuthMethod2) => {
+  AuthMethod2["TOKEN"] = "token";
+  AuthMethod2["CREDENTIALS"] = "credentials";
+  AuthMethod2["ANONYMOUS"] = "anonymous";
+  return AuthMethod2;
 })(AuthMethod || {});
 var WebSocketManager = class extends eventemitter3_default {
   constructor(config) {
@@ -436,7 +437,7 @@ var WebSocketManager = class extends eventemitter3_default {
           this.protocols.push(`token-${this.auth.token}`);
         }
         break;
-      case "auth" /* CREDENTIALS */:
+      case "credentials" /* CREDENTIALS */:
         if (this.auth.credentials) {
           const { username, password } = this.auth.credentials;
           const credentials = btoa(encodeURIComponent(password)).replace(
@@ -526,23 +527,6 @@ var WebSocketManager = class extends eventemitter3_default {
       this.emit("message", parsedData);
     };
   }
-  async checkAuthRequirement() {
-    try {
-      const response = await fetch(this.url.replace(/^ws/, "http"));
-      if (response.status === 401) {
-        const error = {
-          type: "AUTH_ERROR",
-          message: "Authentication required",
-          status: response.status
-        };
-        this.emit("error", error);
-        return false;
-      }
-      return true;
-    } catch (error) {
-      return true;
-    }
-  }
   handleReconnection() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
@@ -617,6 +601,23 @@ var WebSocketManager = class extends eventemitter3_default {
   reconnectWithNewAuth(authConfig) {
     this.setAuthConfig(authConfig);
     this.reconnect();
+  }
+  destroy() {
+    this.clearConnectionTimeout();
+    if (this.ws) {
+      this.ws.onopen = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.onmessage = null;
+      if (this.state !== 3 /* CLOSED */) {
+        this.close();
+      }
+      this.ws = null;
+    }
+    this.removeAllListeners();
+    this.logger = null;
+    this.auth = void 0;
+    this.protocols = [];
   }
 };
 
@@ -715,6 +716,26 @@ var RequestManager = class extends eventemitter3_default {
   clearAuthToken() {
     this.authToken = void 0;
   }
+  clearState() {
+    for (const [requestId] of this.pendingRequests) {
+      this.pendingRequests.delete(requestId);
+    }
+    this.clearAuthToken();
+  }
+  destroy() {
+    for (const [requestId] of this.pendingRequests) {
+      this.pendingRequests.delete(requestId);
+    }
+    this.webSocketManager.removeListener(
+      "message",
+      this.handleMessage.bind(this)
+    );
+    this.removeAllListeners();
+    this.clearAuthToken();
+    this.webSocketManager = null;
+    this.logger = null;
+    this.pendingRequests = null;
+  }
 };
 
 // src/browser/CommunicationsManager.ts
@@ -722,23 +743,40 @@ var CommunicationsManager = class extends eventemitter3_default {
   constructor(config) {
     super();
     this.logger = new BrowserConsoleStrategy();
+    this.config = config;
     this.validateConfig(config);
     try {
-      this.webSocketManager = new WebSocketManager({
-        url: config.url,
-        secure: config.secure,
-        auth: config.auth,
-        maxReconnectAttempts: config.maxReconnectAttempts,
-        reconnectInterval: config.reconnectInterval
-      });
-      this.requestManager = new RequestManager({
-        webSocketManager: this.webSocketManager,
-        requestTimeout: config.requestTimeout
-      });
-      this.setupWebSocketHooks();
+      this.initializeManagers(config);
     } catch (error) {
       this.logger.error("Error initializing CommunicationsManager", { error });
       throw new Error("Failed to initialize CommunicationsManager");
+    }
+  }
+  initializeManagers(config) {
+    this.webSocketManager = new WebSocketManager({
+      url: config.url,
+      secure: config.secure,
+      auth: config.auth,
+      maxReconnectAttempts: config.maxReconnectAttempts,
+      reconnectInterval: config.reconnectInterval
+    });
+    this.requestManager = new RequestManager({
+      webSocketManager: this.webSocketManager,
+      requestTimeout: config.requestTimeout
+    });
+    this.setupWebSocketHooks();
+  }
+  async cleanupCurrentState() {
+    this.webSocketManager.removeAllListeners();
+    this.requestManager.removeAllListeners();
+    if (this.webSocketManager) {
+      await new Promise((resolve) => {
+        this.webSocketManager.once("close", () => resolve());
+        this.webSocketManager.close();
+      });
+    }
+    if (this.requestManager) {
+      this.requestManager.clearState();
     }
   }
   setupWebSocketHooks() {
@@ -750,6 +788,38 @@ var CommunicationsManager = class extends eventemitter3_default {
       this.logger.error("Authentication error", error);
       this.emit("authError", error);
     });
+  }
+  async authenticate(authConfig) {
+    try {
+      await this.cleanupCurrentState();
+      const newConfig = {
+        ...this.config,
+        auth: authConfig
+      };
+      this.initializeManagers(newConfig);
+      this.logger.info("Switched to authenticated mode");
+      this.emit("modeChanged", "authenticated");
+    } catch (error) {
+      this.logger.error("Error switching to authenticated mode", error);
+      throw error;
+    }
+  }
+  async switchToAnonymous() {
+    try {
+      await this.cleanupCurrentState();
+      const anonymousConfig = {
+        ...this.config,
+        auth: {
+          method: "anonymous" /* ANONYMOUS */
+        }
+      };
+      this.initializeManagers(anonymousConfig);
+      this.logger.info("Switched to anonymous mode");
+      this.emit("modeChanged", "anonymous");
+    } catch (error) {
+      this.logger.error("Error switching to anonymous mode", error);
+      throw error;
+    }
   }
   onOpen(callback) {
     this.logger.info("onOpen callback registered");
@@ -796,6 +866,22 @@ var CommunicationsManager = class extends eventemitter3_default {
   }
   isAuthenticated() {
     return this.webSocketManager.isAuthenticated();
+  }
+  getCurrentMode() {
+    return this.config.auth?.method === "anonymous" /* ANONYMOUS */ ? "anonymous" : "authenticated";
+  }
+  destroy() {
+    this.removeAllListeners();
+    if (this.webSocketManager) {
+      this.webSocketManager.destroy();
+      this.webSocketManager = null;
+    }
+    if (this.requestManager) {
+      this.requestManager.destroy();
+      this.requestManager = null;
+    }
+    this.logger = null;
+    this.config = null;
   }
 };
 export {

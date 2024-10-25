@@ -19,4 +19,6 @@ export declare class RequestManager extends EventEmitter {
     private handleResponse;
     setAuthToken(token: string): void;
     clearAuthToken(): void;
+    clearState(): void;
+    destroy(): void;
 }
