@@ -433,7 +433,7 @@ var WebSocketManager = class extends eventemitter3_default {
     switch (this.auth.method) {
       case "token" /* TOKEN */:
         if (this.auth.token) {
-          this.protocols.push(`token.${this.auth.token}`);
+          this.protocols.push(`token-${this.auth.token}`);
         }
         break;
       case "auth" /* CREDENTIALS */:

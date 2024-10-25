@@ -64,7 +64,7 @@ export class WebSocketManager extends EventEmitter {
     switch (this.auth.method) {
       case AuthMethod.TOKEN:
         if (this.auth.token) {
-          this.protocols.push(`token.${this.auth.token}`);
+          this.protocols.push(`token-${this.auth.token}`);
         }
         break;
       case AuthMethod.CREDENTIALS:
