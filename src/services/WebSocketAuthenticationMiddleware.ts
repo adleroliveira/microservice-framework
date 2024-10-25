@@ -23,10 +23,14 @@ export class WebSocketAuthenticationMiddleware extends AuthenticationMiddleware 
       const token = await this.extractToken(request);
       if (token) {
         const result = await this.authProvider.validateToken(token);
-        if (result.success) {
-          await this.attachSessionToConnection(connection, result);
-          return result;
+        if (!result.success) {
+          throw new AuthenticationError(
+            AuthenticationErrorType.INVALID_TOKEN,
+            `Token authentication failed: ${result.error}`
+          );
         }
+        await this.attachSessionToConnection(connection, result);
+        return result;
       }
 
       this.warn(
@@ -36,7 +40,7 @@ export class WebSocketAuthenticationMiddleware extends AuthenticationMiddleware 
       // Fall back to credentials if no token or token invalid
       const credentials = await this.extractCredentials(request);
       const result = await this.authProvider.authenticate(credentials);
-      
+
       if (result.success) {
         await this.attachSessionToConnection(connection, result);
         return result;
