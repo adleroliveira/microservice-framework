@@ -99,9 +99,13 @@ export class WebSocketServer extends MicroserviceFramework<
           socket.destroy();
         });
 
-        if (request.url !== this.path) {
+        // Parse the URL to get just the pathname
+        const url = new URL(request.url!, `http://${request.headers.host}`);
+
+        if (url.pathname !== this.path) {
           socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
           socket.destroy();
+          this.warn(`Invalid path: ${request.url}`);
           return;
         }
 
