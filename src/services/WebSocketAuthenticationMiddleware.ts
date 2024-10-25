@@ -109,7 +109,7 @@ export class WebSocketAuthenticationMiddleware extends AuthenticationMiddleware 
         .split(",")
         .find((p) => p.trim().startsWith("token-"));
       if (!tokenProtocol) return null;
-      const [_, token] = tokenProtocol.split("-");
+      const token = tokenProtocol.trim().substring(6);
       return token;
     }
 
