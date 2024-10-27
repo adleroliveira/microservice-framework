@@ -24,7 +24,7 @@ export declare class WebsocketConnection {
     private closePromise;
     private sessionRefreshTimer?;
     private lastMessageHash;
-    constructor(handleMessage: (data: WebSocket.Data, websocket: WebsocketConnection) => void, handleClose: (connectionId: string) => void, inactivityTimeout?: number, // 5 minutes
+    constructor(handleMessage: (data: WebSocket.Data, websocket: WebsocketConnection) => void, handleClose: (connectionId: string) => Promise<void>, inactivityTimeout?: number, // 5 minutes
     maxMessagesPerMinute?: number, events?: ConnectionEvents | undefined, websocket?: WebSocket);
     setWebSocket(websocket: WebSocket): void;
     private cleanupExistingConnection;

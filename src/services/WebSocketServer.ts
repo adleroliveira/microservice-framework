@@ -430,9 +430,17 @@ export class WebSocketServer extends MicroserviceFramework<
     }
   }
 
-  private handleClose(connectionId: string) {
-    this.connections.delete(connectionId);
-    this.info(`WebSocket connection closed: ${connectionId}`);
+  private async handleClose(connectionId: string) {
+    const connection = this.connections.get(connectionId);
+    if (connection) {
+      await connection.close(1000, "Connection closed");
+      this.connections.delete(connectionId);
+      const sessionId = connection.getSessionId();
+      if (sessionId) {
+        await this.authConfig.sessionStore.delete(sessionId);
+      }
+      this.info(`WebSocket connection closed: ${connectionId}`);
+    }
   }
 
   protected async startDependencies(): Promise<void> {

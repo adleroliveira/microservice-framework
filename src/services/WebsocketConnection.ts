@@ -29,7 +29,7 @@ export class WebsocketConnection {
       data: WebSocket.Data,
       websocket: WebsocketConnection
     ) => void,
-    private handleClose: (connectionId: string) => void,
+    private handleClose: (connectionId: string) => Promise<void>,
     private inactivityTimeout: number = 300000, // 5 minutes
     private maxMessagesPerMinute: number = 100,
     private events?: ConnectionEvents,
@@ -133,8 +133,21 @@ export class WebsocketConnection {
     }
   }
 
-  private handleCloseConnection() {
-    this.handleClose(this.connectionId);
+  private async handleCloseConnection() {
+    try {
+      this.closePromise = new Promise<void>((resolve) => {
+        setTimeout(async () => {
+          await this.handleClose(this.connectionId);
+          resolve();
+        }, WebsocketConnection.FORCED_CLOSE_TIMEOUT);
+      });
+
+      await this.closePromise;
+    } catch (error) {
+      this.events?.onError(this.connectionId, error as Error);
+    } finally {
+      this.closePromise = null;
+    }
   }
 
   private async handleWebsocketMessages(message: WebSocket.Data) {
@@ -242,7 +255,7 @@ export class WebsocketConnection {
 
   public close(code?: number, reason?: string): Promise<void> {
     if (!this.closePromise) {
-      this.closePromise = new Promise((resolve) => {
+      this.closePromise = new Promise<void>((resolve) => {
         this.stopSessionRefresh();
 
         if (!this.websocket) {
@@ -255,18 +268,31 @@ export class WebsocketConnection {
           return;
         }
 
+        let isResolved = false;
         const cleanup = () => {
-          this.cleanupExistingConnection();
-          resolve();
+          if (!isResolved) {
+            isResolved = true;
+            this.cleanupExistingConnection();
+            resolve();
+          }
         };
 
+        // Handle normal close
         this.websocket.on("close", cleanup);
+
+        // Initiate close
         this.websocket.close(code, reason);
 
         // Force close after timeout
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
+          this.websocket?.removeListener("close", cleanup);
           cleanup();
         }, WebsocketConnection.FORCED_CLOSE_TIMEOUT);
+
+        // If closed normally, clear the timeout
+        this.websocket.once("close", () => {
+          clearTimeout(timeoutId);
+        });
       });
     }
 
