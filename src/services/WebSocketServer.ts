@@ -453,32 +453,43 @@ export class WebSocketServer extends MicroserviceFramework<
   }
 
   protected async stopDependencies(): Promise<void> {
-    return new Promise(async (resolve) => {
-      try {
-        // Close all active connections and wait for them to complete
-        this.info("Closing all active WebSocket connections...");
-        await Promise.all(
-          Array.from(this.connections.values()).map((connection) =>
-            connection.close(1000, "Server shutting down")
-          )
-        );
+    try {
+      // First, stop accepting new connections
+      this.server.close();
 
-        // Close the WebSocket server and HTTP server
-        await new Promise<void>((resolveWss) => {
-          this.wss.close(() => {
-            this.server.close(() => {
-              this.info("WebSocket server stopped");
-              resolveWss();
-            });
-          });
+      // Close all active connections
+      this.info("Closing all active WebSocket connections...");
+      await Promise.all(
+        Array.from(this.connections.values()).map((connection) =>
+          connection.close(1000, "Server shutting down")
+        )
+      );
+
+      // Wait for the WSS to close properly
+      await new Promise<void>((resolve, reject) => {
+        // Set a timeout to prevent hanging
+        const timeout = setTimeout(() => {
+          reject(new Error("WSS close timeout"));
+        }, 5000);
+
+        this.wss.close(() => {
+          clearTimeout(timeout);
+          this.info("WebSocket server stopped");
+          resolve();
         });
-
-        resolve();
-      } catch (error: any) {
-        this.error("Error during shutdown:", error);
-        resolve(); // Still resolve to ensure shutdown completes
-      }
-    });
+      });
+    } catch (error: any) {
+      this.error("Error during shutdown:", error);
+      // Force close everything
+      this.wss.clients.forEach((client) => {
+        try {
+          client.terminate();
+        } catch (e) {
+          // Ignore errors during force termination
+        }
+      });
+      throw error; // Re-throw to indicate shutdown failure
+    }
   }
 
   protected async defaultMessageHandler(
