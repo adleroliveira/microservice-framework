@@ -24,7 +24,7 @@ import {
 } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
 import { WebSocketAuthenticationMiddleware } from "./WebSocketAuthenticationMiddleware";
-import { LoggableError } from "src/logging";
+import { LoggableError } from "../logging";
 
 type PayloadType = "object" | "string" | "IRequest" | "IResponse";
 
