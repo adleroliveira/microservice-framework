@@ -6,6 +6,13 @@ declare enum LogLevel {
     ERROR = "ERROR",
     DEBUG = "DEBUG"
 }
+interface LogMessage {
+    sender?: string;
+    timestamp: string;
+    level: string;
+    message: string;
+    payload?: any;
+}
 export declare class ConsoleStrategy extends LogStrategy {
     private static readonly LOG_COLORS;
     constructor(maxStringLength?: number, maxDepth?: number);
@@ -19,5 +26,6 @@ export declare class ConsoleStrategy extends LogStrategy {
     warn(message: any): Promise<void>;
     error(message: any): Promise<void>;
     debug(message: any): Promise<void>;
+    logFromRequest(request: IRequest<LogMessage>): void;
 }
 export {};

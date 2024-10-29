@@ -2,6 +2,7 @@ import { Server, Data } from "ws";
 import { createServer, Server as HttpServer, IncomingMessage } from "http";
 import { Duplex } from "stream";
 import { IAuthenticationMetadata, ISessionData } from "../interfaces";
+import { RequestBuilder } from "../core";
 
 import {
   MicroserviceFramework,
@@ -380,13 +381,11 @@ export class WebSocketServer extends MicroserviceFramework<
       // TODO: handle expired sessions
       const strData = data.toString();
       const detectionResult = detectAndCategorizeMessage(strData);
-      let requestType: string = "";
 
       if (
         detectionResult.payloadType == "string" ||
         detectionResult.payloadType == "object"
       ) {
-        requestType = "raw";
         const response = await this.makeRequest<any>({
           to: this.serviceId,
           requestType: "raw",
@@ -536,23 +535,13 @@ export class WebSocketServer extends MicroserviceFramework<
     return this.connections;
   }
 
-  public broadcast(message: IRequest<WebSocketMessage>): void {
-    const messageString = JSON.stringify(message);
+  public broadcast(message: IRequest<any>): void {
+    const request = RequestBuilder.from(message);
+    request.setRequiresResponse(false);
+    const messageString = JSON.stringify(request.build());
     this.connections.forEach((connection) => {
       connection.send(messageString);
     });
-  }
-
-  public sendToConnection(
-    connectionId: string,
-    message: IResponse<WebSocketMessage>
-  ): void {
-    const connection = this.connections.get(connectionId);
-    if (connection) {
-      connection.send(JSON.stringify(message));
-    } else {
-      this.warn(`Connection not found: ${connectionId}`);
-    }
   }
 
   async getSessionById(sessionId: string): Promise<ISessionData | null> {

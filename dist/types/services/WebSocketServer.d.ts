@@ -1,6 +1,6 @@
 import { ISessionData } from "../interfaces";
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
-import { IBackEnd, IRequest, IResponse, ISessionStore, IAuthenticationProvider } from "../interfaces";
+import { IBackEnd, IRequest, ISessionStore, IAuthenticationProvider } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
 import { WebSocketAuthenticationMiddleware } from "./WebSocketAuthenticationMiddleware";
 export interface HeartbeatRequest {
@@ -68,8 +68,7 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     protected stopDependencies(): Promise<void>;
     protected defaultMessageHandler(request: IRequest<WebSocketMessage>): Promise<WebSocketResponse>;
     protected getConnections(): Map<string, WebsocketConnection>;
-    broadcast(message: IRequest<WebSocketMessage>): void;
-    sendToConnection(connectionId: string, message: IResponse<WebSocketMessage>): void;
+    broadcast(message: IRequest<any>): void;
     getSessionById(sessionId: string): Promise<ISessionData | null>;
     protected rawMessageHandler(message: string): Promise<string>;
 }

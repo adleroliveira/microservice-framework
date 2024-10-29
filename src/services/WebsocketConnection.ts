@@ -49,8 +49,6 @@ export class WebsocketConnection {
   }
 
   private startHeartbeat() {
-    console.log("Starting heartbeat", this.heartbeatInterval);
-
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
     }
@@ -213,6 +211,8 @@ export class WebsocketConnection {
       this.lastMessageHash = messageHash;
 
       this.messageCount++;
+
+      //TODO: look for a more performant way to determine if message is heartbeat response (without JSON.parse it)
       const parsedMessage = JSON.parse(this.dataToString(message));
 
       // Check if it's a heartbeat response
@@ -405,5 +405,17 @@ export class WebsocketConnection {
 
   public getSessionId(): string | undefined {
     return this.getMetadata("sessionId");
+  }
+
+  public getConnectionStatus() {
+    return {
+      connectionId: this.getConnectionId(),
+      lastActivityTime: this.lastActivityTime,
+      lastHeartbeatResponse: this.lastHeartbeatResponse,
+      messageCount: this.messageCount,
+      authenticated: this.isAuthenticated(),
+      sessionId: this.getSessionId(),
+      metadata: Object.fromEntries(this.metadata.entries()),
+    };
   }
 }

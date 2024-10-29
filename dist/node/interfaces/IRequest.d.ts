@@ -9,6 +9,7 @@ export interface IRequestHeader {
     refreshToken?: string;
     authMetadata?: IAuthenticationMetadata;
     sessionId?: string;
+    requiresResponse?: boolean;
 }
 export interface IRequest<T> {
     header: IRequestHeader;

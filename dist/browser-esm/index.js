@@ -727,6 +727,9 @@ var RequestManager = class extends eventemitter3_default {
     this.on(requestType, async (payload, requestHeader) => {
       try {
         const result = await handler(payload, requestHeader);
+        if (!requestHeader.requiresResponse) {
+          return;
+        }
         const response = {
           requestHeader,
           responseHeader: {
@@ -741,6 +744,13 @@ var RequestManager = class extends eventemitter3_default {
         };
         this.webSocketManager.send(JSON.stringify(response));
       } catch (error) {
+        if (!requestHeader.requiresResponse) {
+          this.logger.warn(
+            `Request error not sent. No response required for requestType: ${requestType}`,
+            error
+          );
+          return;
+        }
         const errorResponse = {
           requestHeader,
           responseHeader: {

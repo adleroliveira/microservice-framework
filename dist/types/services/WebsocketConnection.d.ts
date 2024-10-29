@@ -58,5 +58,16 @@ export declare class WebsocketConnection {
     stopSessionRefresh(): void;
     static broadcast(message: string, connections: WebsocketConnection[]): void;
     getSessionId(): string | undefined;
+    getConnectionStatus(): {
+        connectionId: string;
+        lastActivityTime: number;
+        lastHeartbeatResponse: number;
+        messageCount: number;
+        authenticated: boolean;
+        sessionId: string | undefined;
+        metadata: {
+            [k: string]: any;
+        };
+    };
 }
 export {};

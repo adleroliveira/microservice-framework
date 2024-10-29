@@ -145,4 +145,8 @@ export class ConsoleStrategy extends LogStrategy {
   async debug(message: any): Promise<void> {
     await this.log(message, LogLevel.DEBUG);
   }
+
+  public logFromRequest(request: IRequest<LogMessage>): void {
+    this.sendPackaged(request);
+  }
 }

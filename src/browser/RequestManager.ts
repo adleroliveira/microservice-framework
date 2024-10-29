@@ -157,6 +157,9 @@ export class RequestManager extends EventEmitter {
     this.on(requestType, async (payload: T, requestHeader: IRequestHeader) => {
       try {
         const result = await handler(payload, requestHeader);
+        if (!requestHeader.requiresResponse) {
+          return;
+        }
         const response: IResponse<R> = {
           requestHeader,
           responseHeader: {
@@ -171,6 +174,13 @@ export class RequestManager extends EventEmitter {
         };
         this.webSocketManager.send(JSON.stringify(response));
       } catch (error) {
+        if (!requestHeader.requiresResponse) {
+          this.logger.warn(
+            `Request error not sent. No response required for requestType: ${requestType}`,
+            error
+          );
+          return;
+        }
         const errorResponse: IResponse<null> = {
           requestHeader,
           responseHeader: {
