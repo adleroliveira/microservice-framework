@@ -398,11 +398,19 @@ export class WebSocketServer extends MicroserviceFramework<
 
       if (detectionResult.payloadType == "IResponse") {
         const response = detectionResult.payload as IResponse<any>;
-        await this.sendOneWayMessage(
-          JSON.stringify(response),
-          response.requestHeader.requesterAddress,
-          response.body
-        );
+        if (
+          response.requestHeader.requestType &&
+          response.requestHeader.recipientAddress &&
+          response.requestHeader.recipientAddress !=
+            response.responseHeader.responderAddress
+        ) {
+          await this.sendOneWayMessage(
+            response.requestHeader.requestType,
+            response.requestHeader.recipientAddress,
+            JSON.stringify(response.body),
+            response.requestHeader.requestId
+          );
+        }
         return;
       }
 
