@@ -1,8 +1,13 @@
 import { Server, Data } from "ws";
-import { createServer, Server as HttpServer, IncomingMessage } from "http";
+import {
+  createServer,
+  Server as HttpServer,
+  IncomingMessage,
+  request,
+} from "http";
 import { Duplex } from "stream";
 import { IAuthenticationMetadata, ISessionData } from "../interfaces";
-import { RequestBuilder } from "../core";
+import { RequestBuilder, ResponseBuilder } from "../core";
 
 import {
   MicroserviceFramework,
@@ -19,6 +24,7 @@ import {
 } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
 import { WebSocketAuthenticationMiddleware } from "./WebSocketAuthenticationMiddleware";
+import { LoggableError } from "src/logging";
 
 type PayloadType = "object" | "string" | "IRequest" | "IResponse";
 
@@ -452,7 +458,17 @@ export class WebSocketServer extends MicroserviceFramework<
       }
     } catch (error: any) {
       this.error(`Error processing WebSocket message`, error);
-      connection.send(JSON.stringify({ error: "Invalid message format" }));
+
+      const errorResponse = new ResponseBuilder(
+        RequestBuilder.createSimple(
+          connection.getConnectionId(),
+          "undefined",
+          {}
+        ),
+        { data }
+      ).setError(new LoggableError("Invalid message format"));
+
+      connection.send(JSON.stringify(errorResponse.build()));
     }
   }
 
