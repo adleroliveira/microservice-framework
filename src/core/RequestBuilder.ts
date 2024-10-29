@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from "uuid";
 import { IRequest } from "../interfaces";
 
 export class RequestBuilder<T> {
@@ -8,9 +7,10 @@ export class RequestBuilder<T> {
     this.request = {
       header: {
         timestamp: Date.now(),
-        requestId: uuidv4(),
+        requestId: crypto.randomUUID(),
         requesterAddress: "",
         requestType: "",
+        requiresResponse: true,
       },
       body,
     };
@@ -123,7 +123,7 @@ export class RequestBuilder<T> {
   }
 
   public regenerateRequestId(): this {
-    this.request.header.requestId = uuidv4();
+    this.request.header.requestId = crypto.randomUUID();
     return this;
   }
 

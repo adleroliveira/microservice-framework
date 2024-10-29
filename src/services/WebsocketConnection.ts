@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import { ISessionStore, IRequest } from "../interfaces";
 import { createHash } from "crypto";
 import { HeartbeatRequest } from "./WebSocketServer";
+import { RequestBuilder } from "../core";
 
 interface ConnectionEvents {
   onRateLimit: (connectionId: string) => void;
@@ -63,19 +64,12 @@ export class WebsocketConnection {
       return;
     }
 
-    const heartbeatRequest: IRequest<HeartbeatRequest> = {
-      header: {
-        timestamp: Date.now(),
-        requestId: crypto.randomUUID(),
-        requesterAddress: this.getSessionId() || this.connectionId,
-        requestType: "heartbeat",
-      },
-      body: {
-        timestamp: Date.now(),
-      },
-    };
+    const heartbeatRequest = new RequestBuilder({ timestamp: Date.now() })
+      .setRequiresResponse(true)
+      .setRequestType("heartbeat")
+      .setRequesterAddress(this.getSessionId() || this.connectionId);
 
-    this.send(JSON.stringify(heartbeatRequest));
+    this.send(JSON.stringify(heartbeatRequest.build()));
 
     // Set timeout for response
     this.heartbeatTimeoutTimer = setTimeout(() => {

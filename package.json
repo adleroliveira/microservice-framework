@@ -1,6 +1,6 @@
 {
   "name": "microservice-framework",
-  "version": "1.2.14",
+  "version": "1.2.15",
   "description": "TypeScript-based framework designed to simplify the creation and management of microservices",
   "main": "dist/node/index.js",
   "module": "dist/browser-esm/index.js",
