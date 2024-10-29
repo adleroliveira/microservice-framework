@@ -844,25 +844,13 @@ var CommunicationsManager = class extends eventemitter3_default {
     this.registerMessageHandler(
       "heartbeat",
       async (heartbeat, header) => {
-        const response = {
-          requestHeader: header,
-          responseHeader: {
-            timestamp: Date.now(),
-            responderAddress: "client"
-          },
-          body: {
-            success: true,
-            error: null,
-            data: {
-              requestTimestamp: heartbeat.timestamp,
-              responseTimestamp: Date.now()
-            }
-          }
-        };
-        this.webSocketManager.send(JSON.stringify(response));
         const latency = Date.now() - heartbeat.timestamp;
         this.lastHeartbeatTimestamp = Date.now();
         this.emit("heartbeat", { latency });
+        return {
+          requestTimestamp: heartbeat.timestamp,
+          responseTimestamp: Date.now()
+        };
       }
     );
   }

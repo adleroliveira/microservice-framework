@@ -102,29 +102,15 @@ export class CommunicationsManager extends EventEmitter {
     this.registerMessageHandler(
       "heartbeat",
       async (heartbeat: HeartbeatRequest, header: IRequestHeader) => {
-        // Send immediate response
-        const response: IResponse<HeartbeatResponse> = {
-          requestHeader: header,
-          responseHeader: {
-            timestamp: Date.now(),
-            responderAddress: "client",
-          },
-          body: {
-            success: true,
-            error: null,
-            data: {
-              requestTimestamp: heartbeat.timestamp,
-              responseTimestamp: Date.now(),
-            },
-          },
-        };
-
-        this.webSocketManager.send(JSON.stringify(response));
-
         // Emit heartbeat event for monitoring
         const latency = Date.now() - heartbeat.timestamp;
         this.lastHeartbeatTimestamp = Date.now();
         this.emit("heartbeat", { latency });
+
+        return {
+          requestTimestamp: heartbeat.timestamp,
+          responseTimestamp: Date.now(),
+        };
       }
     );
   }
