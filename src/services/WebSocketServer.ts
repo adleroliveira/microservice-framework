@@ -1,11 +1,7 @@
 import { Server, Data } from "ws";
 import { createServer, Server as HttpServer, IncomingMessage } from "http";
 import { Duplex } from "stream";
-import {
-  IAuthenticationMetadata,
-  IRequestHeader,
-  ISessionData,
-} from "../interfaces";
+import { IAuthenticationMetadata, ISessionData } from "../interfaces";
 
 import {
   MicroserviceFramework,
@@ -30,6 +26,21 @@ interface DetectionResult<T> {
   payload: T;
 }
 
+export interface HeartbeatRequest {
+  timestamp: number;
+}
+
+export interface HeartbeatResponse {
+  requestTimestamp: number;
+  responseTimestamp: number;
+}
+
+export interface HeartbeatConfig {
+  enabled: boolean;
+  interval: number; // How often to send heartbeats (ms)
+  timeout: number; // How long to wait for response (ms)
+}
+
 export interface AnonymousSessionConfig {
   enabled: boolean;
   sessionDuration?: number; // Duration in milliseconds
@@ -51,6 +62,7 @@ export interface WebSocketServerConfig extends IServerConfig {
   path?: string;
   maxConnections?: number;
   authentication: AuthenticationConfig;
+  heartbeatConfig?: HeartbeatConfig;
 }
 
 export type WebSocketMessage = {
@@ -74,6 +86,12 @@ export class WebSocketServer extends MicroserviceFramework<
   private authConfig: AuthenticationConfig;
   private authenticationMiddleware?: WebSocketAuthenticationMiddleware;
 
+  private heartbeatConfig: HeartbeatConfig = {
+    enabled: true,
+    interval: 30000, // 30 seconds
+    timeout: 5000, // 5 seconds
+  };
+
   constructor(backend: IBackEnd, config: WebSocketServerConfig) {
     super(backend, config);
 
@@ -83,7 +101,7 @@ export class WebSocketServer extends MicroserviceFramework<
     this.path = config.path || "/ws";
     this.maxConnections = config.maxConnections || 1000;
     this.authConfig = config.authentication;
-
+    this.heartbeatConfig = config.heartbeatConfig || this.heartbeatConfig;
     this.server = createServer();
     this.wss = new Server({ noServer: true });
 
@@ -172,10 +190,11 @@ export class WebSocketServer extends MicroserviceFramework<
         const connection = new WebsocketConnection(
           this.handleMessage.bind(this),
           this.handleClose.bind(this),
-          undefined, // default timeout
           undefined, // default rate limit
           this.handleWsEvents(),
-          ws
+          ws,
+          this.heartbeatConfig.interval,
+          this.heartbeatConfig.timeout
         );
         this.connections.set(connection.getConnectionId(), connection);
       }
@@ -509,12 +528,6 @@ export class WebSocketServer extends MicroserviceFramework<
     return this.connections;
   }
 
-  @RequestHandler<string>("raw")
-  protected async rawMessageHandler(message: string): Promise<string> {
-    this.warn(`Received raw message`, message);
-    return "ERROR: Raw messages not supported. Please use CommunicationsManager";
-  }
-
   public broadcast(message: IRequest<WebSocketMessage>): void {
     const messageString = JSON.stringify(message);
     this.connections.forEach((connection) => {
@@ -536,6 +549,12 @@ export class WebSocketServer extends MicroserviceFramework<
 
   async getSessionById(sessionId: string): Promise<ISessionData | null> {
     return this.authConfig.sessionStore.get(sessionId);
+  }
+
+  @RequestHandler<string>("raw")
+  protected async rawMessageHandler(message: string): Promise<string> {
+    this.warn(`Received raw message`, message);
+    return "ERROR: Raw messages not supported. Please use CommunicationsManager";
   }
 }
 

@@ -8,12 +8,16 @@ interface ConnectionEvents {
 export declare class WebsocketConnection {
     private handleMessage;
     private handleClose;
-    private inactivityTimeout;
     private maxMessagesPerMinute;
     private events?;
+    private heartbeatInterval;
+    private heartbeatTimeout;
     private static readonly MAX_MESSAGE_SIZE;
     private static readonly SESSION_REFRESH_INTERVAL;
     private static readonly FORCED_CLOSE_TIMEOUT;
+    private lastHeartbeatResponse;
+    private heartbeatTimer?;
+    private heartbeatTimeoutTimer?;
     private connectionId;
     private lastActivityTime;
     private messageCount;
@@ -24,14 +28,15 @@ export declare class WebsocketConnection {
     private closePromise;
     private sessionRefreshTimer?;
     private lastMessageHash;
-    constructor(handleMessage: (data: WebSocket.Data, websocket: WebsocketConnection) => void, handleClose: (connectionId: string) => Promise<void>, inactivityTimeout?: number, // 5 minutes
-    maxMessagesPerMinute?: number, events?: ConnectionEvents | undefined, websocket?: WebSocket);
+    constructor(handleMessage: (data: WebSocket.Data, websocket: WebsocketConnection) => void, handleClose: (connectionId: string) => Promise<void>, maxMessagesPerMinute?: number, events?: ConnectionEvents | undefined, websocket?: WebSocket, heartbeatInterval?: number, // 30 seconds
+    heartbeatTimeout?: number);
+    private startHeartbeat;
+    private sendHeartbeat;
     setWebSocket(websocket: WebSocket): void;
     private cleanupExistingConnection;
     private setupEventListeners;
     private handleError;
     private handleUnexpectedResponse;
-    private startInactivityTimer;
     private handlePong;
     send(message: string): void;
     private handleCloseConnection;

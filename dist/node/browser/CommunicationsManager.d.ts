@@ -1,6 +1,6 @@
 import EventEmitter from "eventemitter3";
 import { WebSocketState, AuthMethod, IWebSocketAuthConfig } from "./WebSocketManager";
-import { IResponseData } from "../interfaces";
+import { IResponseData, IRequestHeader } from "../interfaces";
 export interface ICommunicationsManagerConfig {
     url: string;
     secure?: boolean;
@@ -22,6 +22,7 @@ export declare class CommunicationsManager extends EventEmitter {
     private requestManager;
     private logger;
     private config;
+    private lastHeartbeatTimestamp;
     constructor(config: ICommunicationsManagerConfig);
     private initializeManagers;
     private cleanupCurrentState;
@@ -35,10 +36,14 @@ export declare class CommunicationsManager extends EventEmitter {
     private handleMaxReconnectAttemptsReached;
     private validateConfig;
     request<I, O>(requestType: string, body: I, to?: string): Promise<IResponseData<O>>;
-    registerMessageHandler(messageType: string, handler: (data: any) => void): void;
+    registerMessageHandler<T, R>(messageType: string, handler: (data: T, header: IRequestHeader) => Promise<R> | R): void;
     getConnectionState(): WebSocketState;
     updateAuthentication(auth: IWebSocketAuthConfig): void;
     isAuthenticated(): boolean;
     getCurrentMode(): "anonymous" | "authenticated";
     destroy(): void;
+    getConnectionHealth(): {
+        connected: boolean;
+        lastHeartbeat?: number;
+    };
 }

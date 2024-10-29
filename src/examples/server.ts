@@ -4,13 +4,13 @@ import { ExampleWebSocketServer } from "./microservices/ExampleWebSocketServer";
 import { Backend } from "../minimal/Backend";
 import { ConsoleStrategy } from "../logging";
 import path from "path";
-import { FileAuthProvider, FileSessionStore } from "../minimal";
+import { InMemoryAuthProvider, InMemorySessionStore } from "../minimal";
 
 const namespace = "example";
 const logStrategy = new ConsoleStrategy();
 const backend = new Backend();
-const authProvider = new FileAuthProvider();
-const sessionStore = new FileSessionStore();
+const authProvider = new InMemoryAuthProvider();
+const sessionStore = new InMemorySessionStore();
 
 const exampleWebServer = new ExampleWebServer(backend, {
   namespace,
@@ -47,8 +47,6 @@ server.registerService(exampleWebServer);
 server.registerService(exampleWebSocketServer);
 
 const main = async () => {
-  await authProvider.initialize();
-  await sessionStore.initialize();
   await authProvider.addUser("root", "password");
   server.start();
 };

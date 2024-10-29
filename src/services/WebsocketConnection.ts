@@ -1,6 +1,7 @@
 import WebSocket from "ws";
-import { ISessionStore } from "../interfaces";
+import { ISessionStore, IRequest } from "../interfaces";
 import { createHash } from "crypto";
+import { HeartbeatRequest } from "./WebSocketServer";
 
 interface ConnectionEvents {
   onRateLimit: (connectionId: string) => void;
@@ -13,6 +14,9 @@ export class WebsocketConnection {
   private static readonly SESSION_REFRESH_INTERVAL = 60000; // 1 minute
   private static readonly FORCED_CLOSE_TIMEOUT = 5000; // 5 seconds
 
+  private lastHeartbeatResponse: number = Date.now();
+  private heartbeatTimer?: NodeJS.Timeout;
+  private heartbeatTimeoutTimer?: NodeJS.Timeout;
   private connectionId: string;
   private lastActivityTime: number;
   private messageCount: number = 0;
@@ -30,10 +34,11 @@ export class WebsocketConnection {
       websocket: WebsocketConnection
     ) => void,
     private handleClose: (connectionId: string) => Promise<void>,
-    private inactivityTimeout: number = 300000, // 5 minutes
     private maxMessagesPerMinute: number = 100,
     private events?: ConnectionEvents,
-    websocket?: WebSocket
+    websocket?: WebSocket,
+    private heartbeatInterval: number = 30000, // 30 seconds
+    private heartbeatTimeout: number = 5000 // 5 seconds
   ) {
     this.connectionId = crypto.randomUUID();
     this.lastActivityTime = Date.now();
@@ -41,8 +46,44 @@ export class WebsocketConnection {
     if (websocket) {
       this.setWebSocket(websocket);
     }
+  }
 
-    this.startInactivityTimer();
+  private startHeartbeat() {
+    console.log("Starting heartbeat", this.heartbeatInterval);
+
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+    }
+
+    this.heartbeatTimer = setInterval(() => {
+      this.sendHeartbeat();
+    }, this.heartbeatInterval);
+  }
+
+  private sendHeartbeat() {
+    if (!this.isConnected()) {
+      return;
+    }
+
+    const heartbeatRequest: IRequest<HeartbeatRequest> = {
+      header: {
+        timestamp: Date.now(),
+        requestId: crypto.randomUUID(),
+        requesterAddress: this.getSessionId() || this.connectionId,
+        requestType: "heartbeat",
+      },
+      body: {
+        timestamp: Date.now(),
+      },
+    };
+
+    this.send(JSON.stringify(heartbeatRequest));
+
+    // Set timeout for response
+    this.heartbeatTimeoutTimer = setTimeout(() => {
+      this.events?.onError(this.connectionId, new Error("Heartbeat timeout"));
+      this.close(1001, "Heartbeat timeout");
+    }, this.heartbeatTimeout);
   }
 
   public setWebSocket(websocket: WebSocket) {
@@ -88,6 +129,7 @@ export class WebsocketConnection {
       this.handleUnexpectedResponse.bind(this)
     );
 
+    this.startHeartbeat();
     this.eventListenersSetup = true;
   }
 
@@ -102,15 +144,6 @@ export class WebsocketConnection {
       "Unexpected response received"
     );
     this.close(1006, "Unexpected response");
-  }
-
-  private startInactivityTimer() {
-    setInterval(() => {
-      const now = Date.now();
-      if (now - this.lastActivityTime > this.inactivityTimeout) {
-        this.close(1000, "Connection timed out due to inactivity");
-      }
-    }, 60000); // check every minute
   }
 
   private handlePong() {
@@ -180,6 +213,18 @@ export class WebsocketConnection {
       this.lastMessageHash = messageHash;
 
       this.messageCount++;
+      const parsedMessage = JSON.parse(this.dataToString(message));
+
+      // Check if it's a heartbeat response
+      if (
+        parsedMessage?.requestHeader?.requestType === "heartbeat" &&
+        parsedMessage?.body?.success
+      ) {
+        clearTimeout(this.heartbeatTimeoutTimer);
+        this.lastHeartbeatResponse = Date.now();
+        return;
+      }
+
       this.handleMessage(message, this);
     } catch (error) {
       this.events?.onError(this.connectionId, error as Error);
@@ -275,6 +320,13 @@ export class WebsocketConnection {
           clearTimeout(timeoutId);
           cleanup();
         });
+
+        if (this.heartbeatTimer) {
+          clearInterval(this.heartbeatTimer);
+        }
+        if (this.heartbeatTimeoutTimer) {
+          clearTimeout(this.heartbeatTimeoutTimer);
+        }
 
         // Initiate graceful close
         this.websocket.close(code, reason);

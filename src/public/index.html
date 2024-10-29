@@ -60,6 +60,10 @@
         addMessage(`Error: ${error.message}`);
       });
 
+      commManager.on("heartbeat", ({ latency }) => {
+        console.log(`Heartbeat latency ${latency}ms`);
+      });
+
       sendButton.onclick = function () {
         const message = messageInput.value;
         if (message) {

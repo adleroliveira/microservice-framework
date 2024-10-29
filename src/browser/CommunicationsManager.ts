@@ -7,7 +7,13 @@ import {
 } from "./WebSocketManager";
 import { BrowserConsoleStrategy } from "./BrowserConsoleStrategy";
 import { RequestManager } from "./RequestManager";
-import { IResponseData } from "../interfaces";
+import {
+  IResponseData,
+  IRequest,
+  IResponse,
+  IRequestHeader,
+} from "../interfaces";
+import { HeartbeatRequest, HeartbeatResponse } from "../services";
 
 export interface ICommunicationsManagerConfig {
   url: string;
@@ -31,6 +37,7 @@ export class CommunicationsManager extends EventEmitter {
   private requestManager: RequestManager;
   private logger = new BrowserConsoleStrategy();
   private config: ICommunicationsManagerConfig;
+  private lastHeartbeatTimestamp: number = 0;
 
   constructor(config: ICommunicationsManagerConfig) {
     super();
@@ -91,6 +98,35 @@ export class CommunicationsManager extends EventEmitter {
       this.logger.error("Authentication error", error);
       this.emit("authError", error);
     });
+
+    this.registerMessageHandler(
+      "heartbeat",
+      async (heartbeat: HeartbeatRequest, header: IRequestHeader) => {
+        // Send immediate response
+        const response: IResponse<HeartbeatResponse> = {
+          requestHeader: header,
+          responseHeader: {
+            timestamp: Date.now(),
+            responderAddress: "client",
+          },
+          body: {
+            success: true,
+            error: null,
+            data: {
+              requestTimestamp: heartbeat.timestamp,
+              responseTimestamp: Date.now(),
+            },
+          },
+        };
+
+        this.webSocketManager.send(JSON.stringify(response));
+
+        // Emit heartbeat event for monitoring
+        const latency = Date.now() - heartbeat.timestamp;
+        this.lastHeartbeatTimestamp = Date.now();
+        this.emit("heartbeat", { latency });
+      }
+    );
   }
 
   public async authenticate(authConfig: IWebSocketAuthConfig): Promise<void> {
@@ -183,11 +219,21 @@ export class CommunicationsManager extends EventEmitter {
     }
   }
 
-  public registerMessageHandler(
+  public registerMessageHandler<T, R>(
     messageType: string,
-    handler: (data: any) => void
+    handler: (data: T, header: IRequestHeader) => Promise<R> | R
   ) {
-    this.requestManager.on(messageType, handler);
+    this.requestManager.registerHandler(
+      messageType,
+      async (payload: T, header) => {
+        try {
+          return await handler(payload, header);
+        } catch (error) {
+          // Proper error handling while maintaining the contract
+          throw error instanceof Error ? error : new Error(String(error));
+        }
+      }
+    );
   }
 
   public getConnectionState(): WebSocketState {
@@ -223,5 +269,15 @@ export class CommunicationsManager extends EventEmitter {
 
     this.logger = null!;
     this.config = null!;
+  }
+
+  public getConnectionHealth(): {
+    connected: boolean;
+    lastHeartbeat?: number;
+  } {
+    return {
+      connected: this.webSocketManager.getState() === WebSocketState.OPEN,
+      lastHeartbeat: this.lastHeartbeatTimestamp,
+    };
   }
 }

@@ -3,6 +3,18 @@ import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
 import { IBackEnd, IRequest, IResponse, ISessionStore, IAuthenticationProvider } from "../interfaces";
 import { WebsocketConnection } from "./WebsocketConnection";
 import { WebSocketAuthenticationMiddleware } from "./WebSocketAuthenticationMiddleware";
+export interface HeartbeatRequest {
+    timestamp: number;
+}
+export interface HeartbeatResponse {
+    requestTimestamp: number;
+    responseTimestamp: number;
+}
+export interface HeartbeatConfig {
+    enabled: boolean;
+    interval: number;
+    timeout: number;
+}
 export interface AnonymousSessionConfig {
     enabled: boolean;
     sessionDuration?: number;
@@ -22,6 +34,7 @@ export interface WebSocketServerConfig extends IServerConfig {
     path?: string;
     maxConnections?: number;
     authentication: AuthenticationConfig;
+    heartbeatConfig?: HeartbeatConfig;
 }
 export type WebSocketMessage = {
     type: string;
@@ -39,6 +52,7 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     private maxConnections;
     private authConfig;
     private authenticationMiddleware?;
+    private heartbeatConfig;
     constructor(backend: IBackEnd, config: WebSocketServerConfig);
     private setupWebSocketServer;
     private upgradeConnection;
@@ -54,8 +68,8 @@ export declare class WebSocketServer extends MicroserviceFramework<WebSocketMess
     protected stopDependencies(): Promise<void>;
     protected defaultMessageHandler(request: IRequest<WebSocketMessage>): Promise<WebSocketResponse>;
     protected getConnections(): Map<string, WebsocketConnection>;
-    protected rawMessageHandler(message: string): Promise<string>;
     broadcast(message: IRequest<WebSocketMessage>): void;
     sendToConnection(connectionId: string, message: IResponse<WebSocketMessage>): void;
     getSessionById(sessionId: string): Promise<ISessionData | null>;
+    protected rawMessageHandler(message: string): Promise<string>;
 }

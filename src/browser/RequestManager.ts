@@ -1,5 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
-import { IRequest, IResponse, IResponseData } from "../interfaces";
+import {
+  IRequest,
+  IResponse,
+  IResponseData,
+  IRequestHeader,
+} from "../interfaces";
 import EventEmitter from "eventemitter3";
 import { WebSocketManager } from "./WebSocketManager";
 import { BrowserConsoleStrategy } from "./BrowserConsoleStrategy";
@@ -9,10 +14,16 @@ export interface RequestManagerProps {
   requestTimeout?: number;
 }
 
+type RequestHandler<T, R> = (
+  payload: T,
+  requestHeader: IRequestHeader
+) => Promise<R> | R;
+
 export class RequestManager extends EventEmitter {
   private logger: BrowserConsoleStrategy;
   private pendingRequests: Map<string, (response: IResponse<any>) => void> =
     new Map();
+  private requestHandlers: Map<string, RequestHandler<any, any>> = new Map();
   private requestTimeout: number;
   private webSocketManager: WebSocketManager;
   private authToken: string | undefined;
@@ -84,28 +95,38 @@ export class RequestManager extends EventEmitter {
     }
   }
 
-  private handleIncomingRequest(request: IRequest<any>) {
+  private async handleIncomingRequest(request: IRequest<any>) {
     const { requestType } = request.header;
-    if (requestType && this.listenerCount(requestType) > 0) {
-      this.emit(requestType, request.body, (responseBody: any) => {
-        const response: IResponse<any> = {
-          requestHeader: request.header,
-          responseHeader: {
-            responderAddress: "RequestManager",
-            timestamp: Date.now(),
-          },
-          body: {
-            data: responseBody,
-            success: true,
-            error: null,
-          },
-        };
-        this.webSocketManager.send(JSON.stringify(response));
-      });
+
+    if (!requestType) {
+      this.logger.warn("Received request without requestType");
+      return;
+    }
+
+    if (this.listenerCount(requestType) > 0) {
+      // Pass both payload and header to ensure we can construct the response
+      this.emit(requestType, request.body, request.header);
     } else {
       this.logger.warn(
         `No handlers registered for requestType: ${requestType}`
       );
+
+      // Send error response for unhandled request types
+      const errorResponse: IResponse<null> = {
+        requestHeader: request.header,
+        responseHeader: {
+          responderAddress: "RequestManager",
+          timestamp: Date.now(),
+        },
+        body: {
+          data: null,
+          success: false,
+          error: new Error(
+            `No handler registered for requestType: ${requestType}`
+          ),
+        },
+      };
+      this.webSocketManager.send(JSON.stringify(errorResponse));
     }
   }
 
@@ -117,6 +138,60 @@ export class RequestManager extends EventEmitter {
       pendingRequest(response);
       this.pendingRequests.delete(response.requestHeader.requestId);
     }
+  }
+
+  // Method to register handlers for incoming requests
+  public registerHandler<T, R>(
+    requestType: string,
+    handler: (payload: T, requestHeader: IRequestHeader) => Promise<R> | R
+  ): void {
+    if (this.requestHandlers.has(requestType)) {
+      throw new Error(
+        `Handler already registered for requestType: ${requestType}`
+      );
+    }
+
+    this.requestHandlers.set(requestType, handler);
+
+    // Set up the event listener that ensures responses go back through WebSocket
+    this.on(requestType, async (payload: T, requestHeader: IRequestHeader) => {
+      try {
+        const result = await handler(payload, requestHeader);
+        const response: IResponse<R> = {
+          requestHeader,
+          responseHeader: {
+            responderAddress: "RequestManager",
+            timestamp: Date.now(),
+          },
+          body: {
+            data: result,
+            success: true,
+            error: null,
+          },
+        };
+        this.webSocketManager.send(JSON.stringify(response));
+      } catch (error) {
+        const errorResponse: IResponse<null> = {
+          requestHeader,
+          responseHeader: {
+            responderAddress: "RequestManager",
+            timestamp: Date.now(),
+          },
+          body: {
+            data: null,
+            success: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+          },
+        };
+        this.webSocketManager.send(JSON.stringify(errorResponse));
+      }
+    });
+  }
+
+  // Method to remove handlers
+  public removeHandler(requestType: string): void {
+    this.requestHandlers.delete(requestType);
+    this.removeAllListeners(requestType);
   }
 
   public setAuthToken(token: string) {

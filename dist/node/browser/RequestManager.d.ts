@@ -1,4 +1,4 @@
-import { IResponseData } from "../interfaces";
+import { IResponseData, IRequestHeader } from "../interfaces";
 import EventEmitter from "eventemitter3";
 import { WebSocketManager } from "./WebSocketManager";
 export interface RequestManagerProps {
@@ -8,6 +8,7 @@ export interface RequestManagerProps {
 export declare class RequestManager extends EventEmitter {
     private logger;
     private pendingRequests;
+    private requestHandlers;
     private requestTimeout;
     private webSocketManager;
     private authToken;
@@ -17,6 +18,8 @@ export declare class RequestManager extends EventEmitter {
     private handleMessage;
     private handleIncomingRequest;
     private handleResponse;
+    registerHandler<T, R>(requestType: string, handler: (payload: T, requestHeader: IRequestHeader) => Promise<R> | R): void;
+    removeHandler(requestType: string): void;
     setAuthToken(token: string): void;
     clearAuthToken(): void;
     clearState(): void;

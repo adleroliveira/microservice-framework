@@ -1,9 +1,6 @@
 import { IQueueStrategy } from "../interfaces";
 import { LogStrategy } from "./LogStrategy";
 import { LogLevel, LogMessage } from "./LogStrategy";
-/**
- * Enum representing different log levels.
- */
 declare function logMethod(): (target: any, propertyKey: string, descriptor: PropertyDescriptor) => PropertyDescriptor;
 export declare class LoggableError extends Error {
     readonly payload: any;

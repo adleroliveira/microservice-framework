@@ -400,12 +400,12 @@ _BrowserConsoleStrategy.LOG_COLORS = {
 var BrowserConsoleStrategy = _BrowserConsoleStrategy;
 
 // src/browser/WebSocketManager.ts
-var WebSocketState = /* @__PURE__ */ ((WebSocketState3) => {
-  WebSocketState3[WebSocketState3["CONNECTING"] = 0] = "CONNECTING";
-  WebSocketState3[WebSocketState3["OPEN"] = 1] = "OPEN";
-  WebSocketState3[WebSocketState3["CLOSING"] = 2] = "CLOSING";
-  WebSocketState3[WebSocketState3["CLOSED"] = 3] = "CLOSED";
-  return WebSocketState3;
+var WebSocketState = /* @__PURE__ */ ((WebSocketState2) => {
+  WebSocketState2[WebSocketState2["CONNECTING"] = 0] = "CONNECTING";
+  WebSocketState2[WebSocketState2["OPEN"] = 1] = "OPEN";
+  WebSocketState2[WebSocketState2["CLOSING"] = 2] = "CLOSING";
+  WebSocketState2[WebSocketState2["CLOSED"] = 3] = "CLOSED";
+  return WebSocketState2;
 })(WebSocketState || {});
 var AuthMethod = /* @__PURE__ */ ((AuthMethod2) => {
   AuthMethod2["TOKEN"] = "token";
@@ -626,6 +626,7 @@ var RequestManager = class extends eventemitter3_default {
   constructor(props) {
     super();
     this.pendingRequests = /* @__PURE__ */ new Map();
+    this.requestHandlers = /* @__PURE__ */ new Map();
     this.logger = new BrowserConsoleStrategy();
     this.requestTimeout = props.requestTimeout || 3e4;
     this.webSocketManager = props.webSocketManager;
@@ -677,28 +678,33 @@ var RequestManager = class extends eventemitter3_default {
       this.logger.error("Error parsing message:", error);
     }
   }
-  handleIncomingRequest(request) {
+  async handleIncomingRequest(request) {
     const { requestType } = request.header;
-    if (requestType && this.listenerCount(requestType) > 0) {
-      this.emit(requestType, request.body, (responseBody) => {
-        const response = {
-          requestHeader: request.header,
-          responseHeader: {
-            responderAddress: "RequestManager",
-            timestamp: Date.now()
-          },
-          body: {
-            data: responseBody,
-            success: true,
-            error: null
-          }
-        };
-        this.webSocketManager.send(JSON.stringify(response));
-      });
+    if (!requestType) {
+      this.logger.warn("Received request without requestType");
+      return;
+    }
+    if (this.listenerCount(requestType) > 0) {
+      this.emit(requestType, request.body, request.header);
     } else {
       this.logger.warn(
         `No handlers registered for requestType: ${requestType}`
       );
+      const errorResponse = {
+        requestHeader: request.header,
+        responseHeader: {
+          responderAddress: "RequestManager",
+          timestamp: Date.now()
+        },
+        body: {
+          data: null,
+          success: false,
+          error: new Error(
+            `No handler registered for requestType: ${requestType}`
+          )
+        }
+      };
+      this.webSocketManager.send(JSON.stringify(errorResponse));
     }
   }
   handleResponse(response) {
@@ -709,6 +715,52 @@ var RequestManager = class extends eventemitter3_default {
       pendingRequest(response);
       this.pendingRequests.delete(response.requestHeader.requestId);
     }
+  }
+  // Method to register handlers for incoming requests
+  registerHandler(requestType, handler) {
+    if (this.requestHandlers.has(requestType)) {
+      throw new Error(
+        `Handler already registered for requestType: ${requestType}`
+      );
+    }
+    this.requestHandlers.set(requestType, handler);
+    this.on(requestType, async (payload, requestHeader) => {
+      try {
+        const result = await handler(payload, requestHeader);
+        const response = {
+          requestHeader,
+          responseHeader: {
+            responderAddress: "RequestManager",
+            timestamp: Date.now()
+          },
+          body: {
+            data: result,
+            success: true,
+            error: null
+          }
+        };
+        this.webSocketManager.send(JSON.stringify(response));
+      } catch (error) {
+        const errorResponse = {
+          requestHeader,
+          responseHeader: {
+            responderAddress: "RequestManager",
+            timestamp: Date.now()
+          },
+          body: {
+            data: null,
+            success: false,
+            error: error instanceof Error ? error : new Error(String(error))
+          }
+        };
+        this.webSocketManager.send(JSON.stringify(errorResponse));
+      }
+    });
+  }
+  // Method to remove handlers
+  removeHandler(requestType) {
+    this.requestHandlers.delete(requestType);
+    this.removeAllListeners(requestType);
   }
   setAuthToken(token) {
     this.authToken = token;
@@ -743,6 +795,7 @@ var CommunicationsManager = class extends eventemitter3_default {
   constructor(config) {
     super();
     this.logger = new BrowserConsoleStrategy();
+    this.lastHeartbeatTimestamp = 0;
     this.config = config;
     this.validateConfig(config);
     try {
@@ -788,6 +841,30 @@ var CommunicationsManager = class extends eventemitter3_default {
       this.logger.error("Authentication error", error);
       this.emit("authError", error);
     });
+    this.registerMessageHandler(
+      "heartbeat",
+      async (heartbeat, header) => {
+        const response = {
+          requestHeader: header,
+          responseHeader: {
+            timestamp: Date.now(),
+            responderAddress: "client"
+          },
+          body: {
+            success: true,
+            error: null,
+            data: {
+              requestTimestamp: heartbeat.timestamp,
+              responseTimestamp: Date.now()
+            }
+          }
+        };
+        this.webSocketManager.send(JSON.stringify(response));
+        const latency = Date.now() - heartbeat.timestamp;
+        this.lastHeartbeatTimestamp = Date.now();
+        this.emit("heartbeat", { latency });
+      }
+    );
   }
   async authenticate(authConfig) {
     try {
@@ -856,7 +933,16 @@ var CommunicationsManager = class extends eventemitter3_default {
     }
   }
   registerMessageHandler(messageType, handler) {
-    this.requestManager.on(messageType, handler);
+    this.requestManager.registerHandler(
+      messageType,
+      async (payload, header) => {
+        try {
+          return await handler(payload, header);
+        } catch (error) {
+          throw error instanceof Error ? error : new Error(String(error));
+        }
+      }
+    );
   }
   getConnectionState() {
     return this.webSocketManager.getState();
@@ -882,6 +968,12 @@ var CommunicationsManager = class extends eventemitter3_default {
     }
     this.logger = null;
     this.config = null;
+  }
+  getConnectionHealth() {
+    return {
+      connected: this.webSocketManager.getState() === 1 /* OPEN */,
+      lastHeartbeat: this.lastHeartbeatTimestamp
+    };
   }
 };
 export {

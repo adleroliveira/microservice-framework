@@ -39,7 +39,7 @@ export class FileStore {
     // Queue writes to prevent concurrent file access
     const writeOperation = async () => {
       try {
-        const jsonData = JSON.stringify(data, null, 2);
+        const jsonData = JSON.stringify(data || {}, null, 2);
         await fs.writeFile(filePath, jsonData, "utf8");
       } catch (error: any) {
         throw new Error(`Failed to write file ${filename}: ${error.message}`);

@@ -10,10 +10,13 @@ import util from "util";
  */
 
 import { setTimeout, clearTimeout } from "timers";
+import { ConsoleStrategy } from "./ConsoleStrategy";
 
 /**
  * Enum representing different log levels.
  */
+
+const DEFAULT_LOG_STRATEGY = new ConsoleStrategy();
 
 function logMethod() {
   return function (
@@ -507,7 +510,7 @@ export abstract class Loggable {
       if (!message) break;
 
       try {
-        await Loggable.logStrategy.send(message);
+        await (Loggable.logStrategy || DEFAULT_LOG_STRATEGY).send(message);
       } catch (error) {
         console.error("Failed to send message:", error);
         // Optionally re-enqueue the message or implement retry logic
