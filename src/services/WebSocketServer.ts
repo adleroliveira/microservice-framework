@@ -587,11 +587,7 @@ function detectAndCategorizeMessage(message: string): DetectionResult<unknown> {
         parsed !== null &&
         "requestHeader" in parsed &&
         "responseHeader" in parsed &&
-        "body" in parsed &&
-        typeof parsed.body === "object" &&
-        "data" in parsed.body &&
-        "success" in parsed.body &&
-        "error" in parsed.body
+        "body" in parsed
       ) {
         return {
           payloadType: "IResponse",
