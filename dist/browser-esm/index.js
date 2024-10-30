@@ -708,6 +708,11 @@ var RequestManager = class extends eventemitter3_default {
     }
   }
   handleResponse(response) {
+    const { requestType } = response.requestHeader;
+    if (requestType == "MicroserviceFramework::StatusUpdate" && this.listenerCount(requestType) > 0) {
+      this.emit(requestType, response.body.data, response.requestHeader);
+      return;
+    }
     const pendingRequest = this.pendingRequests.get(
       response.requestHeader.requestId
     );

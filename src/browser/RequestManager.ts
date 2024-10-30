@@ -131,6 +131,14 @@ export class RequestManager extends EventEmitter {
   }
 
   private handleResponse<T>(response: IResponse<T>) {
+    const { requestType } = response.requestHeader;
+    if (
+      requestType == "MicroserviceFramework::StatusUpdate" &&
+      this.listenerCount(requestType) > 0
+    ) {
+      this.emit(requestType, response.body.data, response.requestHeader);
+      return;
+    }
     const pendingRequest = this.pendingRequests.get(
       response.requestHeader.requestId
     );

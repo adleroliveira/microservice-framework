@@ -442,6 +442,7 @@ export class WebSocketServer extends MicroserviceFramework<
             sessionId: connection.getSessionId(),
             authMetadata,
             recipientAddress: this.address,
+            requesterAddress: this.address,
           },
           handleStatusUpdate: async (
             updateRequest: IRequest<any>,
