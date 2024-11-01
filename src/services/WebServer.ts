@@ -60,6 +60,17 @@ export class WebServer extends MicroserviceFramework<
     req: http.IncomingMessage,
     res: http.ServerResponse
   ) {
+    if (req.method === "OPTIONS") {
+      res.writeHead(200, {
+        "Access-Control-Allow-Origin": this.corsOrigin,
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400", // 24 hours
+      });
+      res.end();
+      return;
+    }
+
     const parsedUrl = url.parse(req.url || "", true);
 
     if (this.staticDir && req.method === "GET") {
@@ -96,7 +107,7 @@ export class WebServer extends MicroserviceFramework<
       }
     }
 
-    let body = "";
+    const chunks: Buffer[] = [];
     let bodySize = 0;
 
     req.setTimeout(this.timeout, () => {
@@ -109,19 +120,29 @@ export class WebServer extends MicroserviceFramework<
         this.sendResponse(res, 413, { error: "Payload Too Large" });
         req.destroy();
       } else {
-        body += chunk.toString();
+        chunks.push(Buffer.from(chunk));
       }
     });
 
     req.on("end", async () => {
       if (req.destroyed) return;
 
+      const rawBody = Buffer.concat(chunks);
+      const contentType = req.headers["content-type"] || "";
+
+      let parsedBody;
+      if (contentType.includes("multipart/form-data")) {
+        parsedBody = rawBody; // Keep as Buffer for multipart/form-data
+      } else {
+        parsedBody = this.parseBody(rawBody.toString(), contentType);
+      }
+
       const httpRequest: HttpRequest = {
         method: req.method || "GET",
         path: parsedUrl.pathname || "/",
         query: parsedUrl.query as Record<string, string>,
         headers: req.headers as Record<string, string>,
-        body: this.parseBody(body, req.headers["content-type"]),
+        body: parsedBody,
       };
 
       try {
@@ -205,13 +226,29 @@ export class WebServer extends MicroserviceFramework<
   }
 
   private parseBody(body: string, contentType?: string): any {
-    if (contentType?.includes("application/json")) {
+    if (!contentType) return body;
+
+    if (contentType.includes("application/json")) {
       try {
         return JSON.parse(body);
       } catch (error) {
         this.warn(`Failed to parse JSON body: ${error}`);
+        return body;
       }
     }
+
+    // Handle multipart/form-data
+    if (contentType.includes("multipart/form-data")) {
+      try {
+        // For multipart/form-data, we need to parse the raw body
+        // The body will be available as Buffer or string
+        return body;
+      } catch (error) {
+        this.warn(`Failed to parse multipart/form-data: ${error}`);
+        return body;
+      }
+    }
+
     return body;
   }
 
