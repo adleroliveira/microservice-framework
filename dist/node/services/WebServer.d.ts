@@ -36,6 +36,7 @@ export declare class WebServer extends MicroserviceFramework<HttpRequest, HttpRe
     private parseBody;
     private sendResponse;
     private negotiateContentEncoding;
+    private compressContent;
     private processHttpRequest;
     protected startDependencies(): Promise<void>;
     protected stopDependencies(): Promise<void>;

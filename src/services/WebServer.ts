@@ -65,7 +65,7 @@ export class WebServer extends MicroserviceFramework<
         "Access-Control-Allow-Origin": this.corsOrigin,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Max-Age": "86400", // 24 hours
+        "Access-Control-Max-Age": "86400",
       });
       res.end();
       return;
@@ -76,21 +76,23 @@ export class WebServer extends MicroserviceFramework<
     if (this.staticDir && req.method === "GET") {
       let staticFilePath = path.join(this.staticDir, parsedUrl.pathname || "");
 
-      // Check if the path is a directory
-      try {
-        const stats = await fs.stat(staticFilePath);
-        if (stats.isDirectory()) {
-          // If it's a directory, look for index.html
-          staticFilePath = path.join(staticFilePath, "index.html");
-        }
-      } catch (error) {
-        // If stat fails, just continue with the original path
+      // Normalize the path to prevent directory traversal
+      staticFilePath = path.normalize(staticFilePath);
+      if (!staticFilePath.startsWith(this.staticDir)) {
+        this.sendResponse(res, 403, { error: "Forbidden" });
+        return;
       }
 
       try {
+        const stats = await fs.stat(staticFilePath);
+        if (stats.isDirectory()) {
+          staticFilePath = path.join(staticFilePath, "index.html");
+        }
+
         const content = await this.serveStaticFile(staticFilePath);
         if (content) {
-          this.sendStaticResponse(
+          await this.sendStaticResponse(
+            req,
             res,
             200,
             content,
@@ -99,7 +101,26 @@ export class WebServer extends MicroserviceFramework<
           return;
         }
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          // Try fallback to index.html for SPA routing
+          try {
+            const indexPath = path.join(this.staticDir, "index.html");
+            const content = await this.serveStaticFile(indexPath);
+            if (content) {
+              await this.sendStaticResponse(
+                req,
+                res,
+                200,
+                content,
+                "text/html; charset=utf-8"
+              );
+              return;
+            }
+          } catch (indexError) {
+            this.sendResponse(res, 404, { error: "Not Found" });
+            return;
+          }
+        } else {
           this.error(`Error serving static file: ${error}`);
           this.sendResponse(res, 500, { error: "Internal Server Error" });
           return;
@@ -177,52 +198,73 @@ export class WebServer extends MicroserviceFramework<
     }
   }
 
-  private sendStaticResponse(
+  private async sendStaticResponse(
+    req: http.IncomingMessage,
     res: http.ServerResponse,
     statusCode: number,
-    body: Buffer,
+    content: Buffer,
     contentType: string
   ) {
-    const contentEncoding = this.negotiateContentEncoding(res);
+    try {
+      const contentEncoding = this.negotiateContentEncoding(req);
+      const compressedContent = contentEncoding
+        ? await this.compressContent(content, contentEncoding)
+        : content;
 
-    res.writeHead(statusCode, {
-      "Content-Type": contentType,
-      "Access-Control-Allow-Origin": this.corsOrigin,
-      "X-XSS-Protection": "1; mode=block",
-      "X-Frame-Options": "DENY",
-      "X-Content-Type-Options": "nosniff",
-      ...(contentEncoding ? { "Content-Encoding": contentEncoding } : {}),
-    });
+      const headers: Record<string, string> = {
+        "Content-Type": contentType,
+        "Access-Control-Allow-Origin": this.corsOrigin,
+        "X-XSS-Protection": "1; mode=block",
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Length": compressedContent.length.toString(),
+        "Cache-Control": "no-cache",
+      };
 
-    if (contentEncoding === "gzip") {
-      zlib.gzip(body, (_, result) => res.end(result));
-    } else if (contentEncoding === "deflate") {
-      zlib.deflate(body, (_, result) => res.end(result));
-    } else {
-      res.end(body);
+      if (contentEncoding) {
+        headers["Content-Encoding"] = contentEncoding;
+      }
+
+      if (
+        contentType.includes("javascript") &&
+        content.includes('type="module"')
+      ) {
+        headers["Content-Type"] = "application/javascript; charset=utf-8";
+      }
+
+      res.writeHead(statusCode, headers);
+      res.end(compressedContent);
+    } catch (error) {
+      this.error(`Error sending static response: ${error}`);
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": this.corsOrigin,
+      });
+      res.end(JSON.stringify({ error: "Internal Server Error" }));
     }
   }
 
   private getContentType(filePath: string): string {
     const ext = path.extname(filePath).toLowerCase();
-    const mimeTypes: { [key: string]: string } = {
-      ".html": "text/html",
-      ".js": "text/javascript",
-      ".css": "text/css",
-      ".json": "application/json",
+    const contentTypes: Record<string, string> = {
+      ".html": "text/html; charset=utf-8",
+      ".js": "application/javascript; charset=utf-8",
+      ".mjs": "application/javascript; charset=utf-8",
+      ".css": "text/css; charset=utf-8",
+      ".json": "application/json; charset=utf-8",
       ".png": "image/png",
       ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
       ".gif": "image/gif",
       ".svg": "image/svg+xml",
-      ".wav": "audio/wav",
-      ".mp4": "video/mp4",
-      ".woff": "application/font-woff",
-      ".ttf": "application/font-ttf",
+      ".ico": "image/x-icon",
+      ".woff": "font/woff",
+      ".woff2": "font/woff2",
+      ".ttf": "font/ttf",
       ".eot": "application/vnd.ms-fontobject",
-      ".otf": "application/font-otf",
-      ".wasm": "application/wasm",
     };
-    return mimeTypes[ext] || "application/octet-stream";
+
+    return contentTypes[ext] || "application/octet-stream";
   }
 
   private parseBody(body: string, contentType?: string): any {
@@ -252,39 +294,87 @@ export class WebServer extends MicroserviceFramework<
     return body;
   }
 
-  private sendResponse(
+  private async sendResponse(
     res: http.ServerResponse,
     statusCode: number,
     body: any,
     headers: Record<string, string> = {}
   ) {
-    const responseBody = JSON.stringify(body);
-    const contentEncoding = this.negotiateContentEncoding(res);
+    try {
+      const responseBody = JSON.stringify(body);
+      const contentEncoding = this.negotiateContentEncoding(res);
+      const compressedContent = contentEncoding
+        ? await this.compressContent(Buffer.from(responseBody), contentEncoding)
+        : responseBody;
 
-    res.writeHead(statusCode, {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": this.corsOrigin,
-      "X-XSS-Protection": "1; mode=block",
-      "X-Frame-Options": "DENY",
-      "X-Content-Type-Options": "nosniff",
-      ...headers,
-      ...(contentEncoding ? { "Content-Encoding": contentEncoding } : {}),
-    });
+      const finalHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": this.corsOrigin,
+        "X-XSS-Protection": "1; mode=block",
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Length": Buffer.byteLength(compressedContent).toString(),
+        ...headers,
+      };
 
-    if (contentEncoding === "gzip") {
-      zlib.gzip(responseBody, (_, result) => res.end(result));
-    } else if (contentEncoding === "deflate") {
-      zlib.deflate(responseBody, (_, result) => res.end(result));
-    } else {
-      res.end(responseBody);
+      if (contentEncoding) {
+        finalHeaders["Content-Encoding"] = contentEncoding;
+      }
+
+      res.writeHead(statusCode, finalHeaders);
+      res.end(compressedContent);
+    } catch (error) {
+      this.error(`Error sending response: ${error}`);
+      // Send a basic error response without compression if something goes wrong
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": this.corsOrigin,
+      });
+      res.end(JSON.stringify({ error: "Internal Server Error" }));
     }
   }
 
-  private negotiateContentEncoding(res: http.ServerResponse): string | null {
-    const acceptEncoding = (res.getHeader("accept-encoding") as string) || "";
-    if (acceptEncoding.includes("gzip")) return "gzip";
-    if (acceptEncoding.includes("deflate")) return "deflate";
+  private negotiateContentEncoding(
+    req: http.IncomingMessage | http.ServerResponse
+  ): string | null {
+    const acceptEncoding =
+      "headers" in req
+        ? req.headers["accept-encoding"]
+        : (req as any)._req?.headers["accept-encoding"]; // Fallback for ServerResponse
+
+    if (!acceptEncoding) return null;
+
+    if (typeof acceptEncoding === "string") {
+      if (acceptEncoding.includes("gzip")) return "gzip";
+      if (acceptEncoding.includes("deflate")) return "deflate";
+    }
+
     return null;
+  }
+
+  private async compressContent(
+    content: Buffer | string,
+    encoding: string
+  ): Promise<Buffer | string> {
+    if (typeof content === "string") {
+      content = Buffer.from(content);
+    }
+
+    return new Promise((resolve, reject) => {
+      if (encoding === "gzip") {
+        zlib.gzip(content, (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      } else if (encoding === "deflate") {
+        zlib.deflate(content, (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      } else {
+        resolve(content);
+      }
+    });
   }
 
   private async processHttpRequest(
@@ -328,13 +418,4 @@ export class WebServer extends MicroserviceFramework<
       body: { message: "Path not found" },
     };
   }
-
-  // @RequestHandler<HttpRequest>("GET:/")
-  // protected async handleRoot(request: HttpRequest): Promise<HttpResponse> {
-  //   return {
-  //     statusCode: 200,
-  //     headers: { "Content-Type": "application/json" },
-  //     body: { message: "Welcome to the Web Server!" },
-  //   };
-  // }
 }
