@@ -3,6 +3,7 @@ import url from "url";
 import zlib from "zlib";
 import path from "path";
 import fs from "fs/promises";
+import net from "net";
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
 import {
   IBackEnd,
@@ -57,6 +58,51 @@ export class WebServer extends MicroserviceFramework<
     this.staticDir = config.staticDir || null;
     this.apiPrefix = config.apiPrefix || "/api";
     this.server = http.createServer(this.handleRequest.bind(this));
+
+    this.server.keepAliveTimeout = 1000; // 1 second
+    this.server.headersTimeout = 2000; // 2 seconds
+    this.server.timeout = this.timeout;
+
+    this.server.on("error", (error) => {
+      this.error(`Server error: ${error}`);
+    });
+
+    this.server.on(
+      "clientError",
+      (error: Error & { code?: string }, socket: net.Socket) => {
+        this.error(`Client error: ${error}`);
+        if (error.code === "ECONNRESET" || !socket.writable) {
+          return;
+        }
+        socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+      }
+    );
+
+    this.server.on("close", () => {
+      this.debug("Server is shutting down");
+    });
+
+    // Handle connection events
+    this.server.on("connection", (socket) => {
+      // Configure socket settings
+      socket.setKeepAlive(false);
+      socket.setNoDelay(true);
+      socket.setTimeout(this.timeout);
+
+      socket.on("timeout", () => {
+        this.debug("Socket timeout, destroying connection");
+        if (!socket.destroyed) {
+          socket.destroy();
+        }
+      });
+
+      socket.on("error", (error) => {
+        this.error(`Socket error: ${error}`);
+        if (!socket.destroyed) {
+          socket.destroy();
+        }
+      });
+    });
   }
 
   private async handleRequest(
@@ -96,8 +142,12 @@ export class WebServer extends MicroserviceFramework<
     const chunks: Buffer[] = [];
     let bodySize = 0;
 
-    req.setTimeout(this.timeout, () => {
-      this.sendResponse(res, 408, { error: "Request Timeout" });
+    res.setTimeout(this.timeout, () => {
+      this.error(`Request timeout for ${req.url}`);
+      if (this.isConnectionAlive(req)) {
+        this.sendResponse(res, 408, { error: "Request Timeout" });
+        this.destroyConnection(req);
+      }
     });
 
     req.on("data", (chunk) => {
@@ -233,6 +283,9 @@ export class WebServer extends MicroserviceFramework<
     contentType: string
   ) {
     try {
+      // Set Connection header to close explicitly
+      res.setHeader("Connection", "close");
+
       const contentEncoding = this.negotiateContentEncoding(req);
       const compressedContent = contentEncoding
         ? await this.compressContent(content, contentEncoding)
@@ -246,10 +299,13 @@ export class WebServer extends MicroserviceFramework<
         "X-Content-Type-Options": "nosniff",
         "Content-Length": compressedContent.length.toString(),
         "Cache-Control": "no-cache",
+        Connection: "close", // Add explicitly in headers too
+        "Keep-Alive": "timeout=1, max=1", // Limit keep-alive
       };
 
       if (contentEncoding) {
         headers["Content-Encoding"] = contentEncoding;
+        headers["Vary"] = "Accept-Encoding"; // Good practice with compression
       }
 
       if (
@@ -259,15 +315,43 @@ export class WebServer extends MicroserviceFramework<
         headers["Content-Type"] = "application/javascript; charset=utf-8";
       }
 
+      // Set a timeout for the response
+      const TIMEOUT = 30000; // 30 seconds
+      res.setTimeout(TIMEOUT, () => {
+        if (!res.headersSent) {
+          res.setHeader("Connection", "close");
+          res.writeHead(504, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Response timeout" }));
+        }
+        if (req.socket && !req.socket.destroyed) {
+          req.socket.destroy();
+        }
+      });
+
       res.writeHead(statusCode, headers);
       res.end(compressedContent);
+
+      // Clean up after sending
+      if (req.socket && !req.socket.destroyed) {
+        req.socket.setTimeout(1000); // 1 second timeout after response
+        req.socket.unref(); // Allow the process to exit if this is the only connection
+      }
     } catch (error) {
       this.error(`Error sending static response: ${error}`);
-      res.writeHead(500, {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": this.corsOrigin,
-      });
-      res.end(JSON.stringify({ error: "Internal Server Error" }));
+      if (!res.headersSent) {
+        res.setHeader("Connection", "close");
+        res.writeHead(500, {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": this.corsOrigin,
+          Connection: "close",
+        });
+        res.end(JSON.stringify({ error: "Internal Server Error" }));
+      }
+
+      // Ensure connection is cleaned up on error
+      if (req.socket && !req.socket.destroyed) {
+        req.socket.destroy();
+      }
     }
   }
 
@@ -426,8 +510,34 @@ export class WebServer extends MicroserviceFramework<
     });
   }
 
-  protected async stopDependencies(): Promise<void> {
+  public async shutdown(): Promise<void> {
     return new Promise((resolve) => {
+      this.server.close(() => {
+        this.debug("Server has been shut down");
+        resolve();
+      });
+
+      // Force close after timeout
+      setTimeout(() => {
+        this.error("Force closing remaining connections");
+        resolve();
+      }, 10000); // 10 second force shutdown timeout
+    });
+  }
+
+  private isConnectionAlive(req: http.IncomingMessage): boolean {
+    return !!(req.socket && !req.socket.destroyed && req.socket.writable);
+  }
+
+  private destroyConnection(req: http.IncomingMessage): void {
+    if (req.socket && !req.socket.destroyed) {
+      req.socket.destroy();
+    }
+  }
+
+  protected async stopDependencies(): Promise<void> {
+    return new Promise(async (resolve) => {
+      await this.shutdown();
       this.server.close(() => {
         this.info("Web server stopped");
         resolve();

@@ -43,6 +43,9 @@ export declare class WebServer extends MicroserviceFramework<HttpRequest, HttpRe
     private compressContent;
     private processHttpRequest;
     protected startDependencies(): Promise<void>;
+    shutdown(): Promise<void>;
+    private isConnectionAlive;
+    private destroyConnection;
     protected stopDependencies(): Promise<void>;
     protected defaultMessageHandler(request: IRequest<HttpRequest>): Promise<HttpResponse>;
 }
