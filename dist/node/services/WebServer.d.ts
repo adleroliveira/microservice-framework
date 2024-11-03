@@ -18,6 +18,7 @@ export interface WebServerConfig extends IServerConfig {
     timeout?: number;
     corsOrigin?: string;
     staticDir?: string;
+    apiPrefix?: string;
     authProvider?: IAuthenticationProvider;
     sessionStore?: ISessionStore;
 }
@@ -28,8 +29,11 @@ export declare class WebServer extends MicroserviceFramework<HttpRequest, HttpRe
     private timeout;
     private corsOrigin;
     private staticDir;
+    private apiPrefix;
     constructor(backend: IBackEnd, config: WebServerConfig);
     private handleRequest;
+    private handleApiRequest;
+    private handleStaticRequest;
     private serveStaticFile;
     private sendStaticResponse;
     private getContentType;

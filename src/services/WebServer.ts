@@ -31,6 +31,7 @@ export interface WebServerConfig extends IServerConfig {
   timeout?: number;
   corsOrigin?: string;
   staticDir?: string;
+  apiPrefix?: string;
   authProvider?: IAuthenticationProvider;
   sessionStore?: ISessionStore;
 }
@@ -45,6 +46,7 @@ export class WebServer extends MicroserviceFramework<
   private timeout: number;
   private corsOrigin: string;
   private staticDir: string | null;
+  private apiPrefix: string;
 
   constructor(backend: IBackEnd, config: WebServerConfig) {
     super(backend, config);
@@ -53,6 +55,7 @@ export class WebServer extends MicroserviceFramework<
     this.timeout = config.timeout || 30000;
     this.corsOrigin = config.corsOrigin || "*";
     this.staticDir = config.staticDir || null;
+    this.apiPrefix = config.apiPrefix || "/api";
     this.server = http.createServer(this.handleRequest.bind(this));
   }
 
@@ -72,62 +75,24 @@ export class WebServer extends MicroserviceFramework<
     }
 
     const parsedUrl = url.parse(req.url || "", true);
+    const pathname = parsedUrl.pathname || "/";
 
-    if (this.staticDir && req.method === "GET") {
-      let staticFilePath = path.join(this.staticDir, parsedUrl.pathname || "");
-
-      // Normalize the path to prevent directory traversal
-      staticFilePath = path.normalize(staticFilePath);
-      if (!staticFilePath.startsWith(this.staticDir)) {
-        this.sendResponse(res, 403, { error: "Forbidden" });
-        return;
-      }
-
-      try {
-        const stats = await fs.stat(staticFilePath);
-        if (stats.isDirectory()) {
-          staticFilePath = path.join(staticFilePath, "index.html");
-        }
-
-        const content = await this.serveStaticFile(staticFilePath);
-        if (content) {
-          await this.sendStaticResponse(
-            req,
-            res,
-            200,
-            content,
-            this.getContentType(staticFilePath)
-          );
-          return;
-        }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          // Try fallback to index.html for SPA routing
-          try {
-            const indexPath = path.join(this.staticDir, "index.html");
-            const content = await this.serveStaticFile(indexPath);
-            if (content) {
-              await this.sendStaticResponse(
-                req,
-                res,
-                200,
-                content,
-                "text/html; charset=utf-8"
-              );
-              return;
-            }
-          } catch (indexError) {
-            this.sendResponse(res, 404, { error: "Not Found" });
-            return;
-          }
-        } else {
-          this.error(`Error serving static file: ${error}`);
-          this.sendResponse(res, 500, { error: "Internal Server Error" });
-          return;
-        }
-      }
+    if (pathname.startsWith(this.apiPrefix)) {
+      await this.handleApiRequest(req, res, parsedUrl);
+      return;
     }
 
+    if (this.staticDir && req.method === "GET") {
+      const handled = await this.handleStaticRequest(req, res, pathname);
+      if (handled) return;
+    }
+  }
+
+  private async handleApiRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    parsedUrl: url.UrlWithParsedQuery
+  ) {
     const chunks: Buffer[] = [];
     let bodySize = 0;
 
@@ -153,14 +118,18 @@ export class WebServer extends MicroserviceFramework<
 
       let parsedBody;
       if (contentType.includes("multipart/form-data")) {
-        parsedBody = rawBody; // Keep as Buffer for multipart/form-data
+        parsedBody = rawBody;
       } else {
         parsedBody = this.parseBody(rawBody.toString(), contentType);
       }
 
+      // Remove API prefix from path for routing
+      const apiPath =
+        parsedUrl.pathname?.substring(this.apiPrefix.length) || "/";
+
       const httpRequest: HttpRequest = {
         method: req.method || "GET",
-        path: parsedUrl.pathname || "/",
+        path: apiPath,
         query: parsedUrl.query as Record<string, string>,
         headers: req.headers as Record<string, string>,
         body: parsedBody,
@@ -184,6 +153,64 @@ export class WebServer extends MicroserviceFramework<
       this.error(`Request error: ${error}`);
       this.sendResponse(res, 400, { error: "Bad Request" });
     });
+  }
+
+  private async handleStaticRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    pathname: string
+  ): Promise<boolean> {
+    if (!this.staticDir) return false;
+
+    let staticFilePath = path.join(this.staticDir, pathname);
+
+    // Normalize the path to prevent directory traversal
+    staticFilePath = path.normalize(staticFilePath);
+    if (!staticFilePath.startsWith(this.staticDir)) {
+      this.sendResponse(res, 403, { error: "Forbidden" });
+      return true;
+    }
+
+    try {
+      const stats = await fs.stat(staticFilePath);
+      if (stats.isDirectory()) {
+        staticFilePath = path.join(staticFilePath, "index.html");
+      }
+
+      const content = await this.serveStaticFile(staticFilePath);
+      if (content) {
+        await this.sendStaticResponse(
+          req,
+          res,
+          200,
+          content,
+          this.getContentType(staticFilePath)
+        );
+        return true;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        // Try fallback to index.html for SPA routing
+        try {
+          const indexPath = path.join(this.staticDir, "index.html");
+          const content = await this.serveStaticFile(indexPath);
+          if (content) {
+            await this.sendStaticResponse(
+              req,
+              res,
+              200,
+              content,
+              "text/html; charset=utf-8"
+            );
+            return true;
+          }
+        } catch (indexError) {
+          return false;
+        }
+      }
+    }
+
+    return false;
   }
 
   private async serveStaticFile(filePath: string): Promise<Buffer | null> {

@@ -18,6 +18,7 @@ const exampleWebServer = new ExampleWebServer(backend, {
   serviceId: "webservice",
   port: 8082,
   staticDir: path.join(path.resolve(__dirname, "../.."), "/public"),
+  apiPrefix: "/api",
 });
 
 const exampleWebSocketServer = new ExampleWebSocketServer(backend, {
