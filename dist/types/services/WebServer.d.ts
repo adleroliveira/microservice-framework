@@ -1,3 +1,4 @@
+import http from "http";
 import { MicroserviceFramework, IServerConfig } from "../MicroserviceFramework";
 import { IBackEnd, IRequest, ISessionStore, IAuthenticationProvider } from "../interfaces";
 export type HttpRequest = {
@@ -5,7 +6,8 @@ export type HttpRequest = {
     path: string;
     query: Record<string, string>;
     headers: Record<string, string>;
-    body: any;
+    body?: any;
+    rawRequest?: http.IncomingMessage;
 };
 export type HttpResponse = {
     statusCode: number;

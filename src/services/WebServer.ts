@@ -17,7 +17,8 @@ export type HttpRequest = {
   path: string;
   query: Record<string, string>;
   headers: Record<string, string>;
-  body: any;
+  body?: any;
+  rawRequest?: http.IncomingMessage;
 };
 
 export type HttpResponse = {
@@ -139,6 +140,34 @@ export class WebServer extends MicroserviceFramework<
     res: http.ServerResponse,
     parsedUrl: url.UrlWithParsedQuery
   ) {
+    const apiPath = parsedUrl.pathname?.substring(this.apiPrefix.length) || "/";
+
+    const contentType = req.headers["content-type"] || "";
+    if (contentType.includes("multipart/form-data")) {
+      const httpRequest: HttpRequest = {
+        method: req.method || "GET",
+        path: apiPath,
+        query: parsedUrl.query as Record<string, string>,
+        headers: req.headers as Record<string, string>,
+        // Pass the raw request stream instead of body
+        rawRequest: req,
+      };
+
+      try {
+        const response = await this.processHttpRequest(httpRequest);
+        this.sendResponse(
+          res,
+          response.statusCode,
+          response.body,
+          response.headers
+        );
+      } catch (error) {
+        this.error(`Error processing request: ${error}`);
+        this.sendResponse(res, 500, { error: "Internal Server Error" });
+      }
+      return;
+    }
+
     const chunks: Buffer[] = [];
     let bodySize = 0;
 
